@@ -1,83 +1,96 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
 # 1. 페이지 설정
 st.set_page_config(page_title="학교 행정 시스템", page_icon="🏫", layout="centered")
 
-# 2. 디자인 (CSS)
+# 2. 구글 시트 연결 (Secrets에 설정한 gsheets 사용)
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# 3. 디자인 (CSS)
 st.markdown("""
     <style>
     h1, h2, h3 { color: #1E3A8A; }
-    /* 큰 버튼 스타일 */
-    div.stButton > button {
-        width: 100%;
-        height: 100px;
-        font-size: 20px !important;
-        border-radius: 15px;
-        margin-bottom: 10px;
-    }
+    div.stButton > button { width: 100%; height: 80px; font-size: 18px !important; border-radius: 12px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 세션 상태로 메뉴 관리 (버튼 클릭 시 메뉴 이동을 위해)
-if 'menu_option' not in st.session_state:
-    st.session_state.menu_option = "메인 화면"
+# 메뉴 상태 관리
+if 'menu' not in st.session_state:
+    st.session_state.menu = "메인 화면"
 
-# --- 사이드바 메뉴 ---
-with st.sidebar:
-    st.title("🏫 행정 메뉴")
-    # 세션 상태와 연동된 라디오 버튼
-    menu = st.radio(
-        "기능을 선택하세요",
-        ("메인 화면", "결석계 제출", "조퇴증/외출증 발급"),
-        key="sidebar_menu"
-    )
-    # 사이드바에서 선택하면 세션 상태 업데이트
-    st.session_state.menu_option = menu
-
-# --- 각 메뉴별 화면 구현 ---
-current_menu = st.session_state.menu_option
-
-if current_menu == "메인 화면":
+# --- 메인 화면 ---
+if st.session_state.menu == "메인 화면":
     st.title("🏫 학교 행정 시스템")
-    st.subheader("필요한 기능을 선택하세요")
+    st.subheader("원하시는 업무를 선택하세요")
     
-    # 모바일용 큰 버튼 배치
     col1, col2 = st.columns(2)
-    
     with col1:
         if st.button("📝\n결석계 제출"):
-            st.session_state.menu_option = "결석계 제출"
+            st.session_state.menu = "결석계 제출"
             st.rerun()
-            
     with col2:
         if st.button("🏃\n조퇴/외출증"):
-            st.session_state.menu_option = "조퇴증/외출증 발급"
+            st.session_state.menu = "조퇴증/외출증 발급"
             st.rerun()
 
-    st.markdown("---")
-    # 현황판
-    c1, c2 = st.columns(2)
-    c1.metric("오늘의 결석계", "0건")
-    c2.metric("현재 외출/조퇴", "0건")
-
-elif current_menu == "결석계 제출":
+# --- 결석계 제출 화면 ---
+elif st.session_state.menu == "결석계 제출":
     if st.button("⬅️ 메인으로 돌아가기"):
-        st.session_state.menu_option = "메인 화면"
+        st.session_state.menu = "메인 화면"
         st.rerun()
         
     st.title("📝 결석계 제출")
-    # ... (결석계 폼 코드는 동일하게 유지) ...
-    with st.form("absence_form"):
-        name = st.text_input("학생 이름")
-        submitted = st.form_submit_button("제출하기")
-        if submitted:
-            st.success(f"{name} 학생의 결석계가 접수되었습니다.")
+    st.info("내용을 입력하면 담임 선생님의 구글 시트로 자동 저장됩니다.")
 
-elif current_menu == "조퇴증/외출증 발급":
+    with st.form("absence_form", clear_on_submit=True):
+        name = st.text_input("학생 이름")
+        c1, c2, c3 = st.columns(3)
+        grade = c1.selectbox("학년", [1, 2, 3])
+        cls = c2.number_input("반", 1, 15, 1)
+        num = c3.number_input("번호", 1, 40, 1)
+        
+        reason = st.selectbox("사유", ["질병", "경조사", "체험학습", "기타"])
+        detail = st.text_area("상세 사유 (병원명, 질병명 등)")
+        
+        submitted = st.form_submit_button("제출하기")
+        
+        if submitted:
+            if name and detail:
+                try:
+                    # 1. 기존 데이터 읽어오기
+                    existing_data = conn.read(ttl=0)
+                    
+                    # 2. 새 데이터 만들기
+                    new_row = pd.DataFrame([{
+                        "제출일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "이름": name,
+                        "학년": grade,
+                        "반": cls,
+                        "번호": num,
+                        "사유": reason,
+                        "상세내용": detail
+                    }])
+                    
+                    # 3. 데이터 합치기
+                    updated_df = pd.concat([existing_data, new_row], ignore_index=True)
+                    
+                    # 4. 구글 시트 업데이트
+                    conn.update(data=updated_df)
+                    
+                    st.success(f"✅ {name} 학생의 결석계가 성공적으로 저장되었습니다!")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"저장 중 오류가 발생했습니다: {e}")
+            else:
+                st.error("모든 항목을 입력해 주세요.")
+
+# --- 조퇴증/외출증 (준비 중) ---
+elif st.session_state.menu == "조퇴증/외출증 발급":
     if st.button("⬅️ 메인으로 돌아가기"):
-        st.session_state.menu_option = "메인 화면"
+        st.session_state.menu = "메인 화면"
         st.rerun()
     st.title("🏃 조퇴증/외출증 발급")
-    st.info("준비 중인 기능입니다.")
+    st.warning("이 기능은 2단계에서 구현될 예정입니다.")
