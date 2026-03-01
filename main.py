@@ -11,125 +11,155 @@ import io
 st.set_page_config(page_title="경기기계공고 결석신고서", layout="centered")
 
 # 2. 구글 시트 연결
-conn = st.connection("gsheets", type=GSheetsConnection)
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except:
+    st.error("구글 시트 연결 설정이 필요합니다.")
 
-# 3. PDF 생성 클래스 정의
-class PDF(FPDF):
-    def header(self):
-        # 폰트 설정 (GitHub에 업로드한 ttf 파일 이름과 일치해야 함)
-        try:
-            self.add_font('Nanum', '', 'NanumGothic.ttf')
-            self.set_font('Nanum', '', 20)
-        except:
-            self.set_font('Arial', 'B', 20)
+# 3. PDF 생성 클래스 (경기기계공고 양식 맞춤)
+class SchoolPDF(FPDF):
+    def __init__(self):
+        super().__init__()
+        # 폰트 등록 (GitHub에 업로드한 파일명과 일치해야 함)
+        self.add_font('Nanum', '', 'NanumGothic-Regular.ttf')
+        self.add_font('NanumB', '', 'NanumGothic-Bold.ttf')
+
+    def generate_report(self, data, g_sig, s_sig):
+        self.add_page()
         
-        self.cell(0, 20, '결 석 신 고 서', ln=True, align='C')
+        # 제목
+        self.set_font('NanumB', '', 25)
+        self.cell(0, 40, '결 석 신 고 서', ln=True, align='C')
+        self.ln(5)
+
+        # 학생 정보 (괄호 위치 맞춤)
+        self.set_font('Nanum', '', 14)
+        student_info = f"( {data['dept']} )과  ( {data['grade']} )학년  ( {data['cls']} )반  ( {data['num']} )번"
+        self.cell(0, 10, student_info, ln=True, align='C')
+        self.cell(0, 15, f"성명: {data['name']}", ln=True, align='C')
         self.ln(10)
 
-def create_pdf(data, guardian_sig, student_sig):
-    pdf = PDF()
-    pdf.add_page()
-    pdf.add_font('Nanum', '', 'NanumGothic.ttf')
-    pdf.set_font('Nanum', '', 12)
+        # 본문내용
+        self.set_font('Nanum', '', 12)
+        text1 = f"위 본인은 [{data['reason_cat']}] (으)로 인하여 2026년 ( {data['s_m']} )월 ( {data['s_d']} )일부터"
+        text2 = f"( {data['e_m']} )월 ( {data['e_d']} )일까지 ( {data['days']} 일간) [{data['abs_type']}] 하였기에"
+        text3 = "보호자(보증인) 연서로 신고서를 제출합니다."
+        
+        self.cell(0, 10, text1, ln=True, align='L')
+        self.cell(0, 10, text2, ln=True, align='L')
+        self.cell(0, 10, text3, ln=True, align='L')
+        self.ln(20)
 
-    # 1. 학생 정보 행
-    pdf.text(40, 50, f"( {data['학과']} )과  ( {data['학년']} )학년  ( {data['반']} )반  ( {data['번호']} )번")
-    pdf.text(80, 60, f"성명: {data['이름']}")
+        # 날짜
+        today = datetime.now()
+        self.set_font('Nanum', '', 14)
+        self.cell(0, 10, f"{today.year} 년   {today.month} 월   {today.day} 일", ln=True, align='C')
+        self.ln(15)
 
-    # 2. 본문 내용
-    pdf.text(20, 80, f"위 본인은 [{data['사유구분']}] (으)로 인하여 2026년 ( {data['시작월']} )월 ( {data['시작일']} )일부터")
-    pdf.text(20, 90, f"( {data['종료월']} )월 ( {data['종료일']} )일까지 ( {data['일수']} 일간) [{data['결석종류']}] 하였기에")
-    pdf.text(20, 100, "보호자(보증인) 연서로 신고서를 제출합니다.")
+        # 서명란 (이름 옆에 서명 이미지 배치)
+        y_pos = self.get_y()
+        self.cell(100, 10, f"보호자(보증인) : {data['g_name']}", align='L')
+        if g_sig:
+            self.image(g_sig, x=75, y=y_pos-5, w=25) # 서명 위치 조정
+        self.cell(0, 10, "(인)", ln=True, align='L')
+        
+        self.ln(5)
+        y_pos = self.get_y()
+        self.cell(100, 10, f"학 생 : {data['name']}", align='L')
+        if s_sig:
+            self.image(s_sig, x=75, y=y_pos-5, w=25)
+        self.cell(0, 10, "(인)", ln=True, align='L')
 
-    # 3. 제출 일자
-    today = datetime.now()
-    pdf.text(80, 120, f"{today.year} 년  {today.month} 월  {today.day} 일")
+        # 학교장 귀하
+        self.ln(30)
+        self.set_font('NanumB', '', 18)
+        self.cell(0, 10, "경 기 기 계 공 업 고 등 학 교 장   귀하", ln=True, align='C')
 
-    # 4. 서명란 (이미지 삽입)
-    pdf.text(100, 140, f"보호자(보증인) : {data['보호자명']}")
-    if guardian_sig:
-        pdf.image(guardian_sig, x=160, y=132, w=20) # 보호자 서명 위치
-    
-    pdf.text(125, 155, f"학생 : {data['이름']}")
-    if student_sig:
-        pdf.image(student_sig, x=160, y=147, w=20) # 학생 서명 위치
+        return self.output()
 
-    pdf.set_font('Nanum', '', 15)
-    pdf.text(60, 180, "경 기 기 계 공 업 고 등 학 교 장 귀하")
+# --- 앱 UI ---
+st.title("🏫 경기기계공고 행정 자동화")
 
-    return pdf.output()
+# 메뉴 선택 (세션 관리)
+if 'page' not in st.session_state: st.session_state.page = "home"
 
-# --- 앱 화면 구성 ---
-st.title("🏫 결석신고서 제출 시스템")
+if st.session_state.page == "home":
+    col1, col2 = st.columns(2)
+    if col1.button("📝 결석신고서 작성", use_container_width=True):
+        st.session_state.page = "form"
+        st.rerun()
+    if col2.button("🏃 조퇴/외출증 (준비중)", use_container_width=True):
+        st.info("기능 개발 중입니다.")
 
-if 'menu' not in st.session_state:
-    st.session_state.menu = "메인 화면"
-
-if st.session_state.menu == "메인 화면":
-    if st.button("📝 결석신고서 작성하기"):
-        st.session_state.menu = "작성"
+elif st.session_state.page == "form":
+    if st.button("⬅️ 메인으로"):
+        st.session_state.page = "home"
         st.rerun()
 
-elif st.session_state.menu == "작성":
     with st.form("absent_form"):
-        st.subheader("📋 학생 정보")
-        dept = st.text_input("학과 (예: 컴퓨터응용기계과)")
-        c1, c2, c3, c4 = st.columns(4)
+        st.subheader("1. 인적사항")
+        dept = st.text_input("학과")
+        c1, c2, c3 = st.columns(3)
         grade = c1.selectbox("학년", [1, 2, 3])
         cls = c2.number_input("반", 1, 15, 1)
         num = c3.number_input("번호", 1, 40, 1)
         name = st.text_input("학생 성명")
 
-        st.subheader("📅 결석 정보")
-        start_date = st.date_input("시작일")
-        end_date = st.date_input("종료일")
-        total_days = st.number_input("일수", 1, 100, 1)
+        st.subheader("2. 결석 내용")
+        d1, d2 = st.columns(2)
+        start_date = d1.date_input("시작일")
+        end_date = d2.date_input("종료일")
+        days = st.number_input("일수", 1, 30, 1)
         
-        reason_type = st.radio("사유 구분", ["인정", "질병", "기타"], horizontal=True)
-        absent_type = st.radio("종류", ["결석", "지각", "조퇴"], horizontal=True)
-        detail_reason = st.text_area("상세 사유")
+        reason_cat = st.radio("사유 구분", ["인정", "질병", "기타"], horizontal=True)
+        abs_type = st.radio("종류", ["결석", "지각", "조퇴"], horizontal=True)
 
-        st.subheader("✍️ 보호자 정보 및 서명")
-        guardian_name = st.text_input("보호자 성함")
+        st.subheader("3. 보호자 확인 및 서명")
+        g_name = st.text_input("보호자 성함")
         
-        # 보호자 서명 패드
-        st.write("보호자 서명 (마우스/손가락)")
-        g_canvas = st_canvas(height=100, width=300, stroke_width=2, key="g_sig")
-        
-        # 학생 서명 패드
-        st.write("학생 서명")
-        s_canvas = st_canvas(height=100, width=300, stroke_width=2, key="s_sig")
+        col_sig1, col_sig2 = st.columns(2)
+        with col_sig1:
+            st.write("보호자 서명")
+            g_canvas = st_canvas(height=100, width=200, stroke_width=2, key="g_sig")
+        with col_sig2:
+            st.write("학생 서명")
+            s_canvas = st_canvas(height=100, width=200, stroke_width=2, key="s_sig")
 
-        submit = st.form_submit_button("제출 및 PDF 다운로드")
+        submit = st.form_submit_button("신고서 생성 및 제출")
 
         if submit:
-            # 데이터 준비
-            data = {
-                "학과": dept, "학년": grade, "반": cls, "번호": num, "이름": name,
-                "시작월": start_date.month, "시작일": start_date.day,
-                "종료월": end_date.month, "종료일": end_date.day,
-                "일수": total_days, "사유구분": reason_type, "결석종류": absent_type,
-                "보호자명": guardian_name
-            }
+            if not name or not g_name:
+                st.error("모든 정보를 입력해 주세요.")
+            else:
+                # 데이터 정리
+                report_data = {
+                    "dept": dept, "grade": grade, "cls": cls, "num": num, "name": name,
+                    "s_m": start_date.month, "s_d": start_date.day,
+                    "e_m": end_date.month, "e_d": end_date.day,
+                    "days": days, "reason_cat": reason_cat, "abs_type": abs_type,
+                    "g_name": g_name
+                }
 
-            # 서명 이미지를 PNG로 변환
-            g_img = Image.fromarray(g_canvas.image_data.astype('uint8'), 'RGBA')
-            s_img = Image.fromarray(s_canvas.image_data.astype('uint8'), 'RGBA')
-            
-            g_buffer = io.BytesIO()
-            s_buffer = io.BytesIO()
-            g_img.save(g_buffer, format="PNG")
-            s_img.save(s_buffer, format="PNG")
+                # 서명 이미지 처리
+                def get_sig_image(canvas):
+                    img = Image.fromarray(canvas.image_data.astype('uint8'), 'RGBA')
+                    buf = io.BytesIO()
+                    img.save(buf, format="PNG")
+                    return buf
 
-            # PDF 생성
-            pdf_bytes = create_pdf(data, g_buffer, s_buffer)
-            
-            # 구글 시트 저장 (이전 로직 동일하게 추가 가능)
-            
-            st.success("신고서가 생성되었습니다! 아래 버튼을 눌러 다운로드하세요.")
-            st.download_button(
-                label="📄 결석신고서 PDF 다운로드",
-                data=pdf_bytes,
-                file_name=f"결석신고서_{name}.pdf",
-                mime="application/pdf"
-            )
+                g_sig_buf = get_sig_image(g_canvas)
+                s_sig_buf = get_sig_image(s_canvas)
+
+                # PDF 생성
+                pdf_gen = SchoolPDF()
+                pdf_bytes = pdf_gen.generate_report(report_data, g_sig_buf, s_sig_buf)
+
+                # 구글 시트 저장 로직 (선택사항: 나중에 추가 가능)
+                
+                st.success("✅ 결석신고서가 생성되었습니다!")
+                st.download_button(
+                    label="📄 경기기계공고 결석신고서 PDF 다운로드",
+                    data=pdf_bytes,
+                    file_name=f"결석신고서_{name}.pdf",
+                    mime="application/pdf"
+                )
