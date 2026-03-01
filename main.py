@@ -4,13 +4,13 @@ import pandas as pd
 from datetime import datetime
 from streamlit_drawable_canvas import st_canvas
 from fpdf import FPDF
-from PIL import Image, ImageOps, ImageEnhance # 이미지 개선 도구 추가
+from PIL import Image, ImageOps, ImageEnhance
 import io
 import os
 import base64
 
 # ==========================================
-# 1. 초기 설정
+# 1. 초기 설정 및 명부
 # ==========================================
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
@@ -36,44 +36,45 @@ try:
 except:
     pass
 
-# [개선된 이미지 처리 함수]
+# [화질 극대화] 이미지 처리 함수
 def process_image(image_data, mode="evidence"):
     if image_data is None: return ""
     try:
         if mode == "signature":
+            # 서명은 투명 PNG 유지
             img = Image.fromarray(image_data.astype('uint8'), 'RGBA')
             img.thumbnail((200, 100)) 
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             return base64.b64encode(buf.getvalue()).decode()
         else:
-            # --- 증빙서류 가독성 개선 로직 ---
+            # --- 증빙서류 화질 최적화 로직 ---
             img = Image.open(image_data)
+            img = ImageOps.grayscale(img) # 흑백으로 용량 확보
+            img = ImageEnhance.Contrast(img).enhance(1.5) # 대비 최적화
+            img = ImageEnhance.Sharpness(img).enhance(1.2) # 선명도 보정
+
+            # 구글 시트 5만자 제한 내에서 화질을 최대한 높이기 위한 반복 압축
+            quality = 85
+            max_width = 1200 # 해상도 대폭 상향
             
-            # 1. 흑백 변환 (용량 획기적 감소)
-            img = ImageOps.grayscale(img)
-            
-            # 2. 대비 강화 (글자를 선명하게)
-            enhancer = ImageEnhance.Contrast(img)
-            img = enhancer.enhance(2.0) # 대비 2배 강화
-            
-            # 3. 해상도 상향 (가로 800px로 확대)
-            img.thumbnail((800, 800))
-            
-            # 4. 압축 저장
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=50) # 흑백이라 quality 50도 충분히 선명함
-            
-            encoded = base64.b64encode(buf.getvalue()).decode()
-            
-            # 만약 5만자를 넘으면 아주 살짝 더 압축
-            if len(encoded) > 49000:
-                img.thumbnail((600, 600))
+            while True:
+                temp_img = img.copy()
+                temp_img.thumbnail((max_width, max_width))
                 buf = io.BytesIO()
-                img.save(buf, format="JPEG", quality=40)
+                temp_img.save(buf, format="JPEG", quality=quality, optimize=True)
                 encoded = base64.b64encode(buf.getvalue()).decode()
                 
-            return encoded
+                # 5만자(안전선 49,000자) 이하가 되면 중단
+                if len(encoded) < 49000 or (quality <= 20 and max_width <= 400):
+                    return encoded
+                
+                # 용량 초과 시 품질 먼저 낮추고, 그래도 안 되면 해상도 낮춤
+                if quality > 30:
+                    quality -= 10
+                else:
+                    max_width -= 150
+                    quality = 50
     except:
         return ""
 
@@ -85,7 +86,7 @@ def decode_image(base64_string):
         return None
 
 # ==========================================
-# 2. PDF 생성 클래스 (좌표 유지)
+# 2. PDF 생성 클래스 (디자인 문구 제거)
 # ==========================================
 class SchoolPDF(FPDF):
     def __init__(self):
@@ -95,11 +96,10 @@ class SchoolPDF(FPDF):
             self.add_font('NanumB', '', bold_font_path)
 
     def generate_report(self, data, g_sig, s_sig, evidence_img=None):
-        # --- 1페이지: 결석신고서 ---
+        # 1페이지: 신고서
         self.add_page()
         if os.path.exists(bg_image_path):
             self.image(bg_image_path, x=0, y=0, w=210, h=297)
-        
         self.set_text_color(0, 0, 0)
         self.set_font('Nanum', '', 13)
         self.text(98, 55, FIXED_DEPT); self.text(140, 55, str(FIXED_GRADE))
@@ -110,24 +110,20 @@ class SchoolPDF(FPDF):
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
         self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
-        
-        # 서명 이미지 (투명 PNG 유지)
         if g_sig: self.image(g_sig, x=174, y=112, w=18)
         if s_sig: self.image(s_sig, x=174, y=122, w=18)
 
-        # --- 2페이지: 증빙서류 ---
+        # 2페이지: 증빙서류 (문구 제거 및 원본 중시)
         if evidence_img:
             self.add_page()
-            self.set_font('NanumB', '', 20)
-            self.cell(0, 20, f"[{data['name']}] 학생 증빙 서류", ln=True, align='C')
-            self.ln(10)
-            # 흑백으로 처리된 이미지를 큼직하게 배치
-            self.image(evidence_img, x=10, y=40, w=190)
+            # 원본 서류의 느낌을 살리기 위해 제목 없이 이미지만 꽉 차게 배치
+            # 여백 10mm를 제외하고 A4 가로폭에 맞춤
+            self.image(evidence_img, x=10, y=10, w=190)
 
         return bytes(self.output())
 
 # ==========================================
-# 3. 앱 로직
+# 3. 앱 UI
 # ==========================================
 st.sidebar.title("🏫 행정 메뉴")
 menu = st.sidebar.radio("이동", ["메인 화면", "결석계 작성", "교사용 관리"])
@@ -136,7 +132,7 @@ if 'pdf_data' not in st.session_state: st.session_state.pdf_data = None
 
 if menu == "메인 화면":
     st.title("🏫 경기기계공고 행정 시스템")
-    st.write("학생/학부모님은 '결석계 작성'을, 선생님은 '교사용 관리'를 이용하세요.")
+    st.success("학생 명부 기반 자동화 시스템입니다.")
 
 elif menu == "결석계 작성":
     st.title("📝 결석신고서 작성")
@@ -144,7 +140,7 @@ elif menu == "결석계 작성":
     start_d = c1.date_input("시작일")
     end_d = c2.date_input("종료일")
     calc_days = len(pd.bdate_range(start_d, end_d)) if start_d <= end_d else 0
-    st.info(f"평일 결석 일수: **{calc_days}일** (토, 일 제외)")
+    st.info(f"평일 결석 일수: **{calc_days}일**")
 
     with st.form("absence_form"):
         sel_student = st.selectbox("학생 이름 선택", STUDENT_OPTIONS)
@@ -164,6 +160,7 @@ elif menu == "결석계 작성":
             name_only = sel_student.split("(")[0]
             num_only = int(sel_student.split("(")[1].replace("번)", ""))
             
+            # 개선된 인코딩 적용
             g_b64 = process_image(g_canvas.image_data, mode="signature")
             s_b64 = process_image(s_canvas.image_data, mode="signature")
             proof_b64 = process_image(proof_file, mode="evidence")
@@ -183,12 +180,12 @@ elif menu == "결석계 작성":
                     "증빙서류데이터": proof_b64, "보호자서명": g_b64, "학생서명": s_b64
                 }])
                 conn.update(data=pd.concat([existing, new_row], ignore_index=True))
-                st.success("제출되었습니다! 아래 버튼을 눌러 PDF를 저장하세요.")
-            except Exception as e:
-                st.error(f"저장 실패(데이터가 너무 큼): {e}")
+                st.success("정상 제출되었습니다!")
+            except:
+                st.error("저장 실패 (데이터 초과)")
 
     if st.session_state.pdf_data:
-        st.download_button("📄 통합 결석계 PDF 다운로드", data=st.session_state.pdf_data, file_name=f"결석계_{name_only}.pdf", mime="application/pdf")
+        st.download_button("📄 통합 PDF 다운로드", data=st.session_state.pdf_data, file_name=f"결석계_{name_only}.pdf", mime="application/pdf")
 
 elif menu == "교사용 관리":
     st.title("👨‍🏫 교사용 관리")
@@ -200,7 +197,6 @@ elif menu == "교사용 관리":
                 data = data.sort_values(by='제출일시', ascending=False)
                 for i, row in data.iterrows():
                     with st.expander(f"📌 {row['제출일시']} - {row['이름']} 학생"):
-                        st.write(f"**상세사유:** {row['상세사유']}")
                         if st.button(f"📄 통합 PDF 생성", key=f"b_{i}"):
                             try:
                                 dt = str(row['결석기간']).split('(')[0].strip()
@@ -211,7 +207,7 @@ elif menu == "교사용 관리":
                                           "days": int(float(row['일수'])), "g_name": str(row['보호자'])}
                                 pdf_out = SchoolPDF().generate_report(r_data, decode_image(row.get('보호자서명')), decode_image(row.get('학생서명')), decode_image(row.get('증빙서류데이터')))
                                 st.session_state[f"p_{i}"] = pdf_out
-                            except: st.error("PDF 생성 실패")
+                            except: st.error("생성 실패")
                         if f"p_{i}" in st.session_state:
                             st.download_button("📥 다운로드", data=st.session_state[f"p_{i}"], file_name=f"{row['이름']}_결석계.pdf", key=f"d_{i}")
             else: st.info("데이터 없음")
