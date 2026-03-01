@@ -11,7 +11,7 @@ import os
 # ==========================================
 # 1. 초기 설정 및 학생 명부
 # ==========================================
-st.set_page_config(page_title="경기기계공고 결석신고서", layout="centered")
+st.set_page_config(page_title="경기기계공고 행정 자동화", layout="centered")
 
 FIXED_DEPT = "컴퓨터전자과"
 FIXED_GRADE = 3
@@ -34,7 +34,7 @@ except:
     pass
 
 # ==========================================
-# 2. PDF 생성 클래스 (좌표 및 날짜 로직 수정)
+# 2. PDF 생성 클래스 (사용자 지정 좌표값 유지)
 # ==========================================
 class SchoolPDF(FPDF):
     def __init__(self):
@@ -50,98 +50,93 @@ class SchoolPDF(FPDF):
 
         # 텍스트 색상 검정 고정
         self.set_text_color(0, 0, 0)
-        
-        # 1. 학생 정보 (학과, 학년, 반, 번호)
+
+        # [제공해주신 좌표값 그대로 적용]
         self.set_font('Nanum', '', 13)
-        self.text(68, 48, FIXED_DEPT)      
-        self.text(125, 48, str(FIXED_GRADE)) 
-        self.text(147, 48, str(FIXED_CLASS))   
-        self.text(169, 48, str(data['num']))   
+        self.text(98, 55, FIXED_DEPT)      
+        self.text(140, 55, str(FIXED_GRADE)) 
+        self.text(161, 55, str(FIXED_CLASS))   
+        self.text(177, 55, str(data['num']))   
         
-        # 성명 (성명 칸 옆)
-        self.set_font('NanumB', '', 15)
-        self.text(138, 59, data['name']) # 위치 재조정
+        self.set_font('Nanum', '', 15)
+        self.text(150, 65, data['name'])
         
-        # 2. 결석 기간 및 일수
         self.set_font('Nanum', '', 12)
-        self.text(148, 77, str(data['s_m'])) 
-        self.text(168, 77, str(data['s_d'])) 
-        self.text(32, 88, str(data['e_m']))  
-        self.text(53, 88, str(data['e_d']))  
-        self.text(77, 88, str(data['days'])) 
+        self.text(146, 77, str(data['s_m'])) 
+        self.text(163, 77, str(data['s_d'])) 
+        self.text(28, 85, str(data['e_m']))  
+        self.text(47, 85, str(data['e_d']))  
+        self.text(74, 85, str(data['days'])) 
+        
+        # 중간 날짜 (결석 시작일 기준)
+        self.text(104.5, 105, str(data['s_m']))
+        self.text(117.8, 105, str(data['s_d']))
 
-        # 3. 신고 날짜 (결석 시작일 기준으로 세팅)
-        self.set_font('Nanum', '', 13)
-        self.text(82, 120, str(data['s_y']))  # 결석 시작 연도
-        self.text(108, 120, str(data['s_m'])) # 결석 시작 월
-        self.text(126, 120, str(data['s_d'])) # 결석 시작 일
+        # 서명 위치 및 크기 유지
+        if g_sig: self.image(g_sig, x=174, y=112, w=18) 
+        if s_sig: self.image(s_sig, x=174, y=122, w=18)
 
-        # 4. 보호자 및 학생 성명/서명
-        self.text(118, 138, data['g_name']) # 보호자 이름 노출 수정
-        if g_sig:
-            self.image(g_sig, x=168, y=129, w=22) 
-            
-        self.text(138, 153, data['name'])   # 학생 이름 노출 수정
-        if s_sig:
-            self.image(s_sig, x=168, y=144, w=22)
-
-        # 5. 하단 날짜 (마찬가지로 시작일 기준)
-        self.text(100, 246, str(data['s_y']))
-        self.text(128, 246, str(data['s_m']))
-        self.text(145, 246, str(data['s_d']))
+        # 하단 날짜 (결석 시작일 기준)
+        self.text(105.5, 248, str(data['s_m']))
+        self.text(118.5, 248, str(data['s_d']))
+        
+        # 보호자 성함 위치 (서명 옆 빈칸 보정)
+        self.set_font('Nanum', '', 12)
+        self.text(158, 117, data['g_name']) # 보호자 이름
+        self.text(158, 126, data['name'])   # 학생 이름
 
         return bytes(self.output())
 
 # ==========================================
-# 3. 앱 UI (순서 재구성 및 증빙서류 추가)
+# 3. 앱 UI (순서 및 기능 수정)
 # ==========================================
-st.title("🏫 경기기계공고 결석신고서")
+st.title("🏫 경기기계공고 행정 시스템")
 
 if 'menu' not in st.session_state: st.session_state.menu = "메인 화면"
 if 'pdf_data' not in st.session_state: st.session_state.pdf_data = None
 
 if st.session_state.menu == "메인 화면":
-    if st.button("📝 결석신고서 작성 시작", use_container_width=True):
+    if st.button("📝 결석신고서 작성", use_container_width=True):
         st.session_state.menu = "결석계"
         st.rerun()
 
 elif st.session_state.menu == "결석계":
-    if st.button("⬅️ 메인으로"):
+    if st.button("⬅️ 메인으로 돌아가기"):
         st.session_state.menu = "메인 화면"
         st.rerun()
 
-    # 1. 학생 정보
+    # --- 1. 학생 정보 ---
     st.subheader("📍 1. 학생 정보")
     selected_student = st.selectbox("학생 이름을 선택하세요", STUDENT_OPTIONS)
     name_only = selected_student.split("(")[0]
     num_only = int(selected_student.split("(")[1].replace("번)", ""))
 
-    # 2. 결석 날짜 (실시간 계산)
+    # --- 2. 결석 날짜 ---
     st.subheader("📅 2. 결석 날짜")
-    col_d1, col_d2 = st.columns(2)
-    s_date = col_d1.date_input("결석 시작일")
-    e_date = col_d2.date_input("결석 종료일")
-    
-    # 주말 제외 평일 계산
-    if s_date <= e_date:
-        calc_days = len(pd.bdate_range(s_date, e_date))
-        st.info(f"계산된 결석 일수: **{calc_days}일** (주말 제외)")
+    d1, d2 = st.columns(2)
+    start_date = d1.date_input("결석 시작일", value=datetime.now())
+    end_date = d2.date_input("결석 종료일", value=datetime.now())
+
+    if start_date <= end_date:
+        business_days = pd.bdate_range(start=start_date, end=end_date)
+        calc_days = len(business_days)
+        st.info(f"선택하신 기간 중 **평일은 총 {calc_days}일**입니다. (주말 제외)")
     else:
-        st.error("날짜를 다시 확인해 주세요.")
+        st.error("종료일이 시작일보다 빠를 수 없습니다.")
         calc_days = 0
 
-    # 3. 결석 사유 및 서명 (Form 시작)
-    with st.form("absent_form"):
+    # --- 3. 결석 사유 및 4. 서명/증빙 (Form) ---
+    with st.form("absence_form"):
         st.subheader("❓ 3. 결석 사유")
         reason_cat = st.radio("사유 구분", ["질병", "인정", "기타"], horizontal=True)
-        reason_detail = st.text_area("상세 사유 (병원명, 사유 등)")
-        
-        # 증빙 서류 업로드
-        st.subheader("📎 4. 증빙서류 첨부")
-        proof_file = st.file_uploader("병원 진단서, 확인서 등을 업로드하세요", type=['jpg', 'jpeg', 'png', 'pdf'])
+        reason_detail = st.text_area("상세 사유 (병원명, 질병명, 구체적 사유 등)")
 
-        st.subheader("✍️ 5. 보호자 확인 및 서명")
+        st.subheader("✍️ 4. 보호자 확인 및 서명")
         g_name = st.text_input("보호자 성함")
+        
+        # 증빙서류 업로드 기능 추가
+        st.subheader("📎 증빙서류 첨부 (선택)")
+        proof_file = st.file_uploader("진단서, 처방전 등 사진이나 PDF 첨부", type=['jpg', 'jpeg', 'png', 'pdf'])
         
         col_sig1, col_sig2 = st.columns(2)
         with col_sig1:
@@ -153,11 +148,11 @@ elif st.session_state.menu == "결석계":
             s_canvas = st_canvas(height=100, width=200, stroke_width=3, key="s_sig", 
                                  background_color="rgba(0,0,0,0)", update_streamlit=True)
 
-        submit = st.form_submit_button("✅ 결석신고서 생성 및 제출")
+        submit = st.form_submit_button("✅ 결석신고서 PDF 생성")
 
         if submit:
-            if not g_name or not reason_detail:
-                st.error("상세 사유와 보호자 성함을 입력해 주세요.")
+            if not g_name or calc_days == 0:
+                st.error("보호자 성함과 날짜를 확인해 주세요.")
             else:
                 def process_sig(canvas):
                     if canvas.image_data is not None:
@@ -167,12 +162,12 @@ elif st.session_state.menu == "결석계":
                         return buf
                     return None
 
-                # PDF용 데이터 구성 (시작일 정보 포함)
+                # 날짜 데이터 (결석 시작일 기준)
                 report_data = {
                     "num": num_only, "name": name_only,
-                    "s_y": s_date.year, "s_m": s_date.month, "s_d": s_date.day,
-                    "e_m": e_date.month, "e_d": e_date.day,
-                    "days": calc_days, "g_name": g_name, "reason_cat": reason_cat
+                    "s_m": start_date.month, "s_d": start_date.day,
+                    "e_m": end_date.month, "e_d": end_date.day,
+                    "days": calc_days, "g_name": g_name
                 }
 
                 pdf_gen = SchoolPDF()
@@ -180,14 +175,15 @@ elif st.session_state.menu == "결석계":
                     report_data, process_sig(g_canvas), process_sig(s_canvas)
                 )
 
-                # 구글 시트 저장 (증빙서류 유무 포함)
+                # 구글 시트 저장
                 try:
                     existing_data = conn.read(ttl=0)
                     new_row = pd.DataFrame([{
                         "제출일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "이름": name_only, "번호": num_only, "사유": reason_cat,
-                        "상세사유": reason_detail, "보호자": g_name,
-                        "기간": f"{s_date}~{e_date}", "증빙서류": "유" if proof_file else "무"
+                        "이름": name_only, "학년": FIXED_GRADE, "반": FIXED_CLASS, "번호": num_only,
+                        "보호자": g_name, "결석기간": f"{start_date}~{end_date}", "일수": calc_days,
+                        "사유": reason_cat, "상세사유": reason_detail,
+                        "증빙서류": "유" if proof_file else "무"
                     }])
                     updated_df = pd.concat([existing_data, new_row], ignore_index=True)
                     conn.update(data=updated_df)
@@ -199,7 +195,7 @@ elif st.session_state.menu == "결석계":
 # 다운로드 버튼
 if st.session_state.pdf_data:
     st.download_button(
-        label="📄 완성된 결석신고서 PDF 다운로드",
+        label="📄 완성된 결석신고서 다운로드",
         data=st.session_state.pdf_data,
         file_name=f"결석신고서_{name_only}.pdf",
         mime="application/pdf",
