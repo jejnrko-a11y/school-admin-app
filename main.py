@@ -17,7 +17,7 @@ from google.oauth2 import service_account
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
 # [수정] 본인의 폴더 ID (따옴표 안에 ID만 정확히 넣어주세요)
-FOLDER_ID = "여기에_폴더_ID_입력"
+FOLDER_ID = "1so-vV-aebr9ot5FEPjxNayrNG1eFQ57Y"
 
 FIXED_DEPT = "컴퓨터전자과"
 FIXED_GRADE = 3
