@@ -79,27 +79,27 @@ class SchoolPDF(FPDF):
         self.text(146, 77, str(data['s_m'])) 
         self.text(163, 77, str(data['s_d'])) 
         self.text(28, 85, str(data['e_m']))  
-        self.text(48, 85, str(data['e_d']))  
-        self.text(75, 85, str(data['days'])) 
+        self.text(47, 85, str(data['e_d']))  
+        self.text(74, 85, str(data['days'])) 
         
         # 4. 중간 제출 날짜
         today = datetime.now()
-        self.text(105, 105, str(today.month))
-        self.text(118, 105, str(today.day))
+        self.text(104.5, 105, str(today.month))
+        self.text(117.8, 105, str(today.day))
 
         # 5. 보호자 성함 및 서명
-        self.text(158, 119, data['g_name']) 
+        self.text(158, 117, data['g_name']) 
         if g_sig:
-            self.image(g_sig, x=174, y=112, w=20) 
+            self.image(g_sig, x=174, y=112, w=18) 
             
         # 6. 학생 성함 및 서명
-        self.text(158, 128, data['name'])   
+        self.text(158, 126, data['name'])   
         if s_sig:
-            self.image(s_sig, x=174, y=122, w=20)
+            self.image(s_sig, x=174, y=122, w=18)
 
         # 7. 맨 아래 하단 날짜
-        self.text(105.5, 250, str(today.month))
-        self.text(118.5, 250, str(today.day))
+        self.text(105.5, 248, str(today.month))
+        self.text(118.5, 248, str(today.day))
 
         return bytes(self.output())
 
