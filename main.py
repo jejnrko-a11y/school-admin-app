@@ -7,7 +7,33 @@ from fpdf import FPDF
 from PIL import Image
 import io
 import os
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+from google.oauth2 import service_account
 
+# 구글 드라이브 업로드 함수
+def upload_to_drive(file, folder_id):
+    # Secrets에 저장된 정보를 가져와 인증
+    creds_info = st.secrets["connections"]["gsheets"]
+    creds = service_account.Credentials.from_service_account_info(creds_info)
+    service = build('drive', 'v3', credentials=creds)
+
+    file_metadata = {
+        'name': f"{datetime.now().strftime('%m%d')}_{file.name}",
+        'parents': [folder_id]
+    }
+    
+    # 파일 타입에 맞춰 업로드
+    media = MediaIoBaseUpload(file, mimetype=file.type, resumable=True)
+    
+    uploaded_file = service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields='id'
+    ).execute()
+    
+    return uploaded_file.get('id')
+    
 # ==========================================
 # 1. 초기 설정 및 학생 명부
 # ==========================================
