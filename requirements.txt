@@ -3,3 +3,4 @@ pandas
 st-gsheets-connection
 streamlit-drawable-canvas
 fpdf2
+Pillow
