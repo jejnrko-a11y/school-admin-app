@@ -4,3 +4,5 @@ st-gsheets-connection
 streamlit-drawable-canvas
 fpdf2
 Pillow
+google-api-python-client
+google-auth
