@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 from streamlit_drawable_canvas import st_canvas
 from fpdf import FPDF
-from PIL import Image
+from PIL import Image, ImageOps, ImageEnhance # 이미지 개선 도구 추가
 import io
 import os
 import base64
@@ -36,25 +36,44 @@ try:
 except:
     pass
 
-# 이미지 처리 함수 (서명은 투명 PNG, 증빙은 JPEG)
+# [개선된 이미지 처리 함수]
 def process_image(image_data, mode="evidence"):
     if image_data is None: return ""
     try:
         if mode == "signature":
-            # 서명은 투명 PNG로 처리 (용량 절약을 위해 아주 작게 축소)
             img = Image.fromarray(image_data.astype('uint8'), 'RGBA')
             img.thumbnail((200, 100)) 
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             return base64.b64encode(buf.getvalue()).decode()
         else:
-            # 증빙서류는 JPEG로 압축
+            # --- 증빙서류 가독성 개선 로직 ---
             img = Image.open(image_data)
-            if img.mode != 'RGB': img = img.convert('RGB')
-            img.thumbnail((500, 500))
+            
+            # 1. 흑백 변환 (용량 획기적 감소)
+            img = ImageOps.grayscale(img)
+            
+            # 2. 대비 강화 (글자를 선명하게)
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(2.0) # 대비 2배 강화
+            
+            # 3. 해상도 상향 (가로 800px로 확대)
+            img.thumbnail((800, 800))
+            
+            # 4. 압축 저장
             buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=40)
-            return base64.b64encode(buf.getvalue()).decode()
+            img.save(buf, format="JPEG", quality=50) # 흑백이라 quality 50도 충분히 선명함
+            
+            encoded = base64.b64encode(buf.getvalue()).decode()
+            
+            # 만약 5만자를 넘으면 아주 살짝 더 압축
+            if len(encoded) > 49000:
+                img.thumbnail((600, 600))
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=40)
+                encoded = base64.b64encode(buf.getvalue()).decode()
+                
+            return encoded
     except:
         return ""
 
@@ -66,7 +85,7 @@ def decode_image(base64_string):
         return None
 
 # ==========================================
-# 2. PDF 생성 클래스 (멀티 페이지 지원)
+# 2. PDF 생성 클래스 (좌표 유지)
 # ==========================================
 class SchoolPDF(FPDF):
     def __init__(self):
@@ -90,22 +109,20 @@ class SchoolPDF(FPDF):
         self.text(28, 85, str(data['e_m'])); self.text(47, 85, str(data['e_d'])); self.text(74, 85, str(data['days']))
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
         self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
-        
-        # 이름 기입
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
         
-        # 서명 이미지 (투명 PNG이므로 배경의 (인)이 보임)
+        # 서명 이미지 (투명 PNG 유지)
         if g_sig: self.image(g_sig, x=174, y=112, w=18)
         if s_sig: self.image(s_sig, x=174, y=122, w=18)
 
-        # --- 2페이지: 증빙서류 (있을 경우만) ---
+        # --- 2페이지: 증빙서류 ---
         if evidence_img:
             self.add_page()
             self.set_font('NanumB', '', 20)
             self.cell(0, 20, f"[{data['name']}] 학생 증빙 서류", ln=True, align='C')
             self.ln(10)
-            # 이미지를 페이지 중앙에 적절한 크기로 배치
-            self.image(evidence_img, x=15, y=40, w=180)
+            # 흑백으로 처리된 이미지를 큼직하게 배치
+            self.image(evidence_img, x=10, y=40, w=190)
 
         return bytes(self.output())
 
@@ -119,7 +136,7 @@ if 'pdf_data' not in st.session_state: st.session_state.pdf_data = None
 
 if menu == "메인 화면":
     st.title("🏫 경기기계공고 행정 시스템")
-    st.write("사용할 기능을 선택해 주세요.")
+    st.write("학생/학부모님은 '결석계 작성'을, 선생님은 '교사용 관리'를 이용하세요.")
 
 elif menu == "결석계 작성":
     st.title("📝 결석신고서 작성")
@@ -127,12 +144,12 @@ elif menu == "결석계 작성":
     start_d = c1.date_input("시작일")
     end_d = c2.date_input("종료일")
     calc_days = len(pd.bdate_range(start_d, end_d)) if start_d <= end_d else 0
-    st.info(f"평일 결석 일수: **{calc_days}일**")
+    st.info(f"평일 결석 일수: **{calc_days}일** (토, 일 제외)")
 
     with st.form("absence_form"):
         sel_student = st.selectbox("학생 이름 선택", STUDENT_OPTIONS)
         reason_detail = st.text_area("상세 사유")
-        proof_file = st.file_uploader("증빙서류 사진 첨부 (JPG/PNG)", type=['jpg', 'png', 'jpeg'])
+        proof_file = st.file_uploader("증빙서류(진단서 등) 사진 첨부", type=['jpg', 'png', 'jpeg'])
         g_name = st.text_input("보호자 성함")
         
         sc1, sc2 = st.columns(2)
@@ -147,7 +164,6 @@ elif menu == "결석계 작성":
             name_only = sel_student.split("(")[0]
             num_only = int(sel_student.split("(")[1].replace("번)", ""))
             
-            # 데이터 압축 및 변환
             g_b64 = process_image(g_canvas.image_data, mode="signature")
             s_b64 = process_image(s_canvas.image_data, mode="signature")
             proof_b64 = process_image(proof_file, mode="evidence")
@@ -155,13 +171,7 @@ elif menu == "결석계 작성":
             rep_data = {"num": num_only, "name": name_only, "s_m": start_d.month, "s_d": start_d.day,
                         "e_m": end_d.month, "e_d": end_d.day, "days": calc_days, "g_name": g_name}
             
-            # 통합 PDF 생성 (신고서 + 증빙서류)
-            pdf_bytes = SchoolPDF().generate_report(
-                rep_data, 
-                decode_image(g_b64), 
-                decode_image(s_b64),
-                decode_image(proof_b64) if proof_b64 else None
-            )
+            pdf_bytes = SchoolPDF().generate_report(rep_data, decode_image(g_b64), decode_image(s_b64), decode_image(proof_b64))
             st.session_state.pdf_data = pdf_bytes
 
             try:
@@ -173,12 +183,12 @@ elif menu == "결석계 작성":
                     "증빙서류데이터": proof_b64, "보호자서명": g_b64, "학생서명": s_b64
                 }])
                 conn.update(data=pd.concat([existing, new_row], ignore_index=True))
-                st.success("성공적으로 제출되었습니다!")
+                st.success("제출되었습니다! 아래 버튼을 눌러 PDF를 저장하세요.")
             except Exception as e:
-                st.error(f"시트 저장 실패: {e}")
+                st.error(f"저장 실패(데이터가 너무 큼): {e}")
 
     if st.session_state.pdf_data:
-        st.download_button("📄 통합 결석계 PDF 다운로드", data=st.session_state.pdf_data, file_name=f"결석계_통합_{datetime.now().strftime('%m%d')}.pdf")
+        st.download_button("📄 통합 결석계 PDF 다운로드", data=st.session_state.pdf_data, file_name=f"결석계_{name_only}.pdf", mime="application/pdf")
 
 elif menu == "교사용 관리":
     st.title("👨‍🏫 교사용 관리")
@@ -190,29 +200,19 @@ elif menu == "교사용 관리":
                 data = data.sort_values(by='제출일시', ascending=False)
                 for i, row in data.iterrows():
                     with st.expander(f"📌 {row['제출일시']} - {row['이름']} 학생"):
-                        st.write(f"**결석기간:** {row['결석기간']} ({row['일수']}일간)")
-                        
-                        if st.button(f"📄 통합 PDF 생성 및 확인", key=f"b_{i}"):
+                        st.write(f"**상세사유:** {row['상세사유']}")
+                        if st.button(f"📄 통합 PDF 생성", key=f"b_{i}"):
                             try:
                                 dt = str(row['결석기간']).split('(')[0].strip()
                                 sd = datetime.strptime(dt.split('~')[0].strip(), "%Y-%m-%d")
                                 ed = datetime.strptime(dt.split('~')[1].strip(), "%Y-%m-%d")
-                                r_data = {"num": int(float(row['번호'])), "name": str(row['is_student' if 'is_student' in row else '이름']), 
+                                r_data = {"num": int(float(row['번호'])), "name": str(row['이름']), 
                                           "s_m": sd.month, "s_d": sd.day, "e_m": ed.month, "e_d": ed.day,
                                           "days": int(float(row['일수'])), "g_name": str(row['보호자'])}
-                                
-                                # 교사용 통합 PDF 재생성
-                                pdf_out = SchoolPDF().generate_report(
-                                    r_data, 
-                                    decode_image(row.get('보호자서명')), 
-                                    decode_image(row.get('학생서명')),
-                                    decode_image(row.get('증빙서류데이터'))
-                                )
+                                pdf_out = SchoolPDF().generate_report(r_data, decode_image(row.get('보호자서명')), decode_image(row.get('학생서명')), decode_image(row.get('증빙서류데이터')))
                                 st.session_state[f"p_{i}"] = pdf_out
-                                st.success("통합 PDF 생성 완료")
-                            except Exception as e: st.error(f"오류: {e}")
-                        
+                            except: st.error("PDF 생성 실패")
                         if f"p_{i}" in st.session_state:
-                            st.download_button("📥 통합 PDF 다운로드", data=st.session_state[f"p_{i}"], file_name=f"{row['이름']}_통합결석계.pdf", key=f"d_{i}")
+                            st.download_button("📥 다운로드", data=st.session_state[f"p_{i}"], file_name=f"{row['이름']}_결석계.pdf", key=f"d_{i}")
             else: st.info("데이터 없음")
-        except Exception as e: st.error(f"시트 로드 실패: {e}")
+        except: st.error("시트 로드 실패")
