@@ -14,8 +14,7 @@ import base64
 # ==========================================
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
-# [교사용 비밀번호 설정] - 원하시는 번호로 바꾸세요
-ADMIN_PASSWORD = "1234" 
+ADMIN_PASSWORD = "1234" # 교사용 비밀번호
 
 FIXED_DEPT = "컴퓨터전자과"
 FIXED_GRADE = 3
@@ -37,29 +36,31 @@ try:
 except:
     pass
 
-# 사진을 글자로 변환 (압축 포함)
-def encode_image_compressed(uploaded_file):
-    if uploaded_file is not None:
-        try:
-            img = Image.open(uploaded_file)
-            if img.mode != 'RGB': img = img.convert('RGB')
-            img.thumbnail((400, 400)) # 크기 축소
-            buffer = io.BytesIO()
-            img.save(buffer, format="JPEG", quality=50)
-            return base64.b64encode(buffer.getvalue()).decode()
-        except: return "압축실패"
-    return ""
-
-# [추가] 글자를 다시 사진으로 복구하는 함수
-def decode_image(base64_string):
+# 이미지/서명을 텍스트로 변환 및 압축
+def encode_image_to_base64(image_or_file, quality=50, size=(400, 400)):
+    if image_or_file is None: return ""
     try:
-        img_data = base64.b64decode(base64_string)
-        return Image.open(io.BytesIO(img_data))
-    except:
-        return None
+        if isinstance(image_or_file, Image.Image):
+            img = image_or_file
+        else:
+            img = Image.open(image_or_file)
+        
+        if img.mode != 'RGB': img = img.convert('RGB')
+        img.thumbnail(size)
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=quality)
+        return base64.b64encode(buffer.getvalue()).decode()
+    except: return ""
+
+# 텍스트를 다시 이미지(BytesIO)로 복구
+def decode_base64_to_bytes(base64_string):
+    if not base64_string: return None
+    try:
+        return io.BytesIO(base64.b64decode(base64_string))
+    except: return None
 
 # ==========================================
-# 2. PDF 생성 클래스 (생략 - 기존과 동일)
+# 2. PDF 생성 클래스 (경기기계공고 전용)
 # ==========================================
 class SchoolPDF(FPDF):
     def __init__(self):
@@ -67,119 +68,154 @@ class SchoolPDF(FPDF):
         if os.path.exists(font_path):
             self.add_font('Nanum', '', font_path)
             self.add_font('NanumB', '', bold_font_path)
-    def generate_report(self, data, g_sig, s_sig):
+
+    def generate_report(self, data, g_sig_bytes, s_sig_bytes):
         self.add_page()
-        if os.path.exists(bg_image_path): self.image(bg_image_path, x=0, y=0, w=210, h=297)
+        if os.path.exists(bg_image_path):
+            self.image(bg_image_path, x=0, y=0, w=210, h=297)
+
         self.set_text_color(0, 0, 0)
         self.set_font('Nanum', '', 13)
-        self.text(98, 55, FIXED_DEPT); self.text(140, 55, str(FIXED_GRADE))
-        self.text(161, 55, str(FIXED_CLASS)); self.text(177, 55, str(data['num']))
-        self.set_font('Nanum', '', 15); self.text(150, 65, data['name'])
-        self.set_font('Nanum', '', 12); self.text(146, 77, str(data['s_m'])); self.text(163, 77, str(data['s_d']))
-        self.text(28, 85, str(data['e_m'])); self.text(47, 85, str(data['e_d'])); self.text(74, 85, str(data['days']))
-        self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
-        if g_sig: self.image(g_sig, x=174, y=112, w=18)
-        if s_sig: self.image(s_sig, x=174, y=122, w=18)
-        self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
-        self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
+        # 인적사항 (좌표 유지)
+        self.text(98, 55, FIXED_DEPT)      
+        self.text(140, 55, str(FIXED_GRADE)) 
+        self.text(161, 55, str(FIXED_CLASS))   
+        self.text(177, 55, str(data['num']))   
+        self.set_font('Nanum', '', 15)
+        self.text(150, 65, data['name'])
+        
+        # 날짜 및 일수
+        self.set_font('Nanum', '', 12)
+        self.text(146, 77, str(data['s_m'])) 
+        self.text(163, 77, str(data['s_d'])) 
+        self.text(28, 85, str(data['e_m']))  
+        self.text(47, 85, str(data['e_d']))  
+        self.text(74, 85, str(data['days'])) 
+        
+        # 제출일 (시작일 기준)
+        self.text(104.5, 105, str(data['s_m']))
+        self.text(117.8, 105, str(data['s_d']))
+        self.text(105.5, 248, str(data['s_m']))
+        self.text(118.5, 248, str(data['s_d']))
+
+        # 성명 및 서명 이미지 배치
+        self.text(158, 117, data['g_name']) 
+        self.text(158, 126, data['name'])   
+        if g_sig_bytes: self.image(g_sig_bytes, x=174, y=112, w=18)
+        if s_sig_bytes: self.image(s_sig_bytes, x=174, y=122, w=18)
+
         return bytes(self.output())
 
 # ==========================================
-# 3. 앱 UI
+# 3. 앱 UI 및 로직
 # ==========================================
-if 'pdf_data' not in st.session_state: st.session_state.pdf_data = None
-if 'menu' not in st.session_state: st.session_state.menu = "메인 화면"
+st.sidebar.title("🏫 학교 행정 메뉴")
+menu = st.sidebar.radio("메뉴 선택", ["메인 화면", "결석계 작성", "교사용 관리"])
 
-st.sidebar.title("🏫 메뉴")
-menu_choice = st.sidebar.radio("이동하기", ["메인 화면", "결석계 작성", "교사용 관리"])
-
-if menu_choice == "메인 화면":
+if menu == "메인 화면":
     st.title("🏫 경기기계공고 행정 시스템")
-    st.write("왼쪽 메뉴에서 원하는 기능을 선택하세요.")
-    col1, col2 = st.columns(2)
-    if col1.button("📝 결석계 작성"):
-        st.session_state.menu = "결석계"
-        st.rerun()
+    st.info("왼쪽 메뉴에서 업무를 선택해 주세요.")
 
-elif menu_choice == "결석계 작성":
+elif menu == "결석계 작성":
     st.title("📝 결석신고서 작성")
-    # (기존 결석계 작성 코드 부분)
+    
+    st.subheader("📅 날짜 설정")
     d1, d2 = st.columns(2)
-    start_date = d1.date_input("시작일"); end_date = d2.date_input("종료일")
-    calc_days = len(pd.bdate_range(start_date, end_date)) if start_date <= end_date else 0
-    st.info(f"평일 결석 일수: **{calc_days}일**")
+    start_d = d1.date_input("시작일")
+    end_d = d2.date_input("종료일")
+    calc_days = len(pd.bdate_range(start_d, end_d)) if start_d <= end_d else 0
+    st.write(f"👉 결석 일수: **{calc_days}일**")
 
-    with st.form("absence_form"):
-        sel_student = st.selectbox("이름 선택", STUDENT_OPTIONS)
-        reason_detail = st.text_area("상세내용")
+    with st.form("absent_form"):
+        sel_student = st.selectbox("학생 이름 선택", STUDENT_OPTIONS)
+        reason_detail = st.text_area("상세 사유")
         proof_file = st.file_uploader("증빙서류 사진", type=['jpg', 'jpeg', 'png'])
         g_name = st.text_input("보호자 성함")
+        
         c1, c2 = st.columns(2)
         with c1: g_canvas = st_canvas(height=100, width=200, stroke_width=3, key="g_sig", background_color="rgba(0,0,0,0)")
         with c2: s_canvas = st_canvas(height=100, width=200, stroke_width=3, key="s_sig", background_color="rgba(0,0,0,0)")
-        
-        if st.form_submit_button("✅ 제출 및 저장"):
-            img_text = encode_image_compressed(proof_file)
-            report_data = {"num": int(sel_student.split("(")[1].replace("번)", "")), "name": sel_student.split("(")[0],
-                           "s_m": start_date.month, "s_d": start_date.day, "e_m": end_date.month, "e_d": end_date.day,
-                           "days": calc_days, "g_name": g_name}
+
+        if st.form_submit_button("✅ 결석계 제출"):
+            name_only = sel_student.split("(")[0]
+            num_only = int(sel_student.split("(")[1].replace("번)", ""))
             
-            # PDF 생성 로직
+            # 서명 및 이미지 데이터 처리
+            g_sig_img = Image.fromarray(g_canvas.image_data.astype('uint8'), 'RGBA').convert('RGB')
+            s_sig_img = Image.fromarray(s_canvas.image_data.astype('uint8'), 'RGBA').convert('RGB')
+            
+            g_sig_base64 = encode_image_to_base64(g_sig_img, quality=30, size=(200, 100))
+            s_sig_base64 = encode_image_to_base64(s_sig_img, quality=30, size=(200, 100))
+            proof_base64 = encode_image_to_base64(proof_file)
+
+            # PDF 생성
+            report_data = {"num": num_only, "name": name_only, "s_m": start_d.month, "s_d": start_d.day,
+                           "e_m": end_d.month, "e_d": end_d.day, "days": calc_days, "g_name": g_name}
+            
             pdf_gen = SchoolPDF()
-            # 서명 처리 함수 생략(기존과 동일)
-            def ps(cv):
-                img = Image.fromarray(cv.image_data.astype('uint8'), 'RGBA')
-                b = io.BytesIO(); img.save(b, format="PNG"); return b
-            st.session_state.pdf_data = pdf_gen.generate_report(report_data, ps(g_canvas), ps(s_canvas))
-            
-            # 시트 저장
+            # PDF 생성을 위해 BytesIO로 변환하여 전달
+            pdf_bytes_out = pdf_gen.generate_report(report_data, decode_base64_to_bytes(g_sig_base64), decode_base64_to_bytes(s_sig_base64))
+            st.session_state.temp_pdf = pdf_bytes_out
+
+            # 구글 시트 저장
             try:
                 existing = conn.read(ttl=0)
-                new_row = pd.DataFrame([{"제출일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                         "이름": report_data["name"], "번호": report_data["num"],
-                                         "보호자": g_name, "결석기간": f"{start_date}~{end_date}",
-                                         "상세사유": reason_detail, "증빙서류데이터": img_text}])
+                new_row = pd.DataFrame([{
+                    "제출일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "이름": name_only, "번호": num_only, "보호자": g_name,
+                    "결석기간": f"{start_d}~{end_d}", "일수": calc_days, "상세사유": reason_detail,
+                    "증빙서류데이터": proof_base64, "보호자서명": g_sig_base64, "학생서명": s_sig_base64
+                }])
                 conn.update(data=pd.concat([existing, new_row], ignore_index=True))
                 st.success("제출 완료!")
-            except: st.error("시트 저장 실패")
+            except Exception as e: st.error(f"저장 실패: {e}")
 
-    if st.session_state.pdf_data:
-        st.download_button("📄 PDF 다운로드", data=st.session_state.pdf_data, file_name=f"결석계.pdf", mime="application/pdf")
+    if 'temp_pdf' in st.session_state and st.session_state.temp_pdf:
+        st.download_button("📄 결석계 PDF 다운로드", data=st.session_state.temp_pdf, file_name="결석계.pdf")
 
-# ==========================================
-# 4. [신규] 교사용 관리 페이지
-# ==========================================
-elif menu_choice == "교사용 관리":
-    st.title("👨‍🏫 교사용 관리 페이지")
-    pw = st.text_input("관리자 비밀번호를 입력하세요", type="password")
+elif menu == "교사용 관리":
+    st.title("👨‍🏫 교사용 관리")
+    pw = st.text_input("비밀번호", type="password")
     
     if pw == ADMIN_PASSWORD:
-        st.success("인증되었습니다.")
         try:
-            # 시트 데이터 불러오기
             data = conn.read(ttl=0)
             if not data.empty:
-                st.subheader("📋 최근 제출 현황")
-                # 리스트 형태로 보여주기
                 for i, row in data.iterrows():
-                    with st.expander(f"{row['제출일시']} - {row['이름']}({row['번호']}번) 학생"):
-                        st.write(f"**보호자:** {row['보호자']}")
-                        st.write(f"**결석기간:** {row['결석기간']}")
+                    with st.expander(f"{row['제출일시']} - {row['이름']} 학생"):
+                        st.write(f"**결석기간:** {row['결석기간']} ({row['일수']}일간)")
                         st.write(f"**상세사유:** {row['상세사유']}")
                         
-                        # [핵심] 사진 복구 출력
-                        if row['증빙서류데이터']:
-                            st.write("**첨부된 증빙서류:**")
-                            decoded_img = decode_image(row['증빙서류데이터'])
-                            if decoded_img:
-                                st.image(decoded_img, caption=f"{row['이름']} 학생 증빙서류", width=400)
-                            else:
-                                st.warning("사진을 불러올 수 없습니다.")
-                        else:
-                            st.info("첨부된 서류가 없습니다.")
-            else:
-                st.info("제출된 데이터가 없습니다.")
-        except:
-            st.error("데이터를 가져오는 데 실패했습니다.")
-    elif pw != "":
-        st.error("비밀번호가 틀렸습니다.")
+                        col_view, col_pdf = st.columns(2)
+                        with col_view:
+                            if row['증빙서류데이터']:
+                                st.image(decode_base64_to_bytes(row['증빙서류데이터']), caption="증빙서류", width=300)
+                        
+                        with col_pdf:
+                            st.write("📂 **관리용 파일 생성**")
+                            # [교사용 PDF 재생성 로직]
+                            if st.button(f"📄 {row['이름']} PDF 생성", key=f"btn_{i}"):
+                                # 시트의 텍스트 데이터를 날짜 객체로 변환
+                                try:
+                                    s_date_str = row['결석기간'].split('~')[0]
+                                    s_date_obj = datetime.strptime(s_date_str, "%Y-%m-%d")
+                                    e_date_str = row['결석기간'].split('~')[1]
+                                    e_date_obj = datetime.strptime(e_date_str, "%Y-%m-%d")
+                                    
+                                    admin_report_data = {
+                                        "num": int(row['번호']), "name": row['이름'], 
+                                        "s_m": s_date_obj.month, "s_d": s_date_obj.day,
+                                        "e_m": e_date_obj.month, "e_d": e_date_obj.day,
+                                        "days": int(row['일수']), "g_name": row['보호자']
+                                    }
+                                    
+                                    pdf_gen_admin = SchoolPDF()
+                                    admin_pdf = pdf_gen_admin.generate_report(
+                                        admin_report_data, 
+                                        decode_base64_to_bytes(row['보호자서명']), 
+                                        decode_base64_to_bytes(row['학생서명'])
+                                    )
+                                    st.download_button(f"📥 {row['이름']} PDF 다운로드", data=admin_pdf, file_name=f"결석계_{row['이름']}.pdf")
+                                except: st.error("PDF 생성 실패 (데이터 형식 오류)")
+            else: st.info("데이터가 없습니다.")
+        except: st.error("시트 로드 실패")
