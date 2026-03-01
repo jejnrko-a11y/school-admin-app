@@ -34,9 +34,41 @@ try:
 except:
     pass
 
-def encode_image(uploaded_file):
+# [핵심 수정] 이미지를 50,000자 이하로 압축하는 함수
+def encode_image_compressed(uploaded_file):
     if uploaded_file is not None:
-        return base64.b64encode(uploaded_file.read()).decode()
+        try:
+            # 1. 이미지 열기
+            img = Image.open(uploaded_file)
+            # 2. RGB 모드로 변경 (RGBA나 다른 모드일 경우 에러 방지)
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # 3. 크기 조절 (가로 400px 기준으로 비율 유지)
+            base_width = 400
+            w_percent = (base_width / float(img.size[0]))
+            h_size = int((float(img.size[1]) * float(w_percent)))
+            img = img.resize((base_width, h_size), Image.LANCZOS)
+            
+            # 4. 압축하여 버퍼에 저장 (JPEG 화질 50%로 낮춤)
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=50, optimize=True)
+            
+            # 5. Base64 변환
+            encoded = base64.b64encode(buffer.getvalue()).decode()
+            
+            # 6. 구글 시트 제한(50,000자) 확인
+            if len(encoded) > 50000:
+                # 더 작게 한 번 더 압축
+                img = img.resize((200, int(h_size * 0.5)), Image.LANCZOS)
+                buffer = io.BytesIO()
+                img.save(buffer, format="JPEG", quality=30)
+                encoded = base64.b64encode(buffer.getvalue()).decode()
+                
+            return encoded
+        except Exception as e:
+            st.warning(f"사진 압축 실패: {e}")
+            return "압축실패"
     return ""
 
 # ==========================================
@@ -103,13 +135,11 @@ elif st.session_state.menu == "결석계":
         st.session_state.menu = "메인 화면"
         st.rerun()
 
-    # 날짜 계산은 실시간 반영을 위해 Form 밖에서 수행
     st.subheader("📅 결석 날짜 설정")
     d1, d2 = st.columns(2)
     start_date = d1.date_input("시작일")
     end_date = d2.date_input("종료일")
     
-    calc_days = (end_date - start_date).days + 1
     if start_date <= end_date:
         business_days = pd.bdate_range(start_date, end_date)
         calc_days = len(business_days)
@@ -118,7 +148,6 @@ elif st.session_state.menu == "결석계":
         st.error("날짜를 확인하세요.")
         calc_days = 0
 
-    # 양식 입력 시작
     with st.form("absence_form"):
         st.subheader("📍 1. 학생 선택")
         sel_student = st.selectbox("이름을 선택하세요", STUDENT_OPTIONS)
@@ -126,12 +155,13 @@ elif st.session_state.menu == "결석계":
         st.subheader("❓ 2. 사유 및 서류")
         reason_cat = st.radio("구분", ["질병", "인정", "기타"], horizontal=True)
         reason_detail = st.text_area("상세내용")
+        
+        # [수정] PDF는 압축이 어려우므로 사진(JPG, PNG) 위주로 권장
         proof_file = st.file_uploader("증빙서류 사진 첨부 (JPG, PNG)", type=['jpg', 'jpeg', 'png'])
 
         st.subheader("✍️ 3. 서명란")
         g_name = st.text_input("보호자 성함")
         
-        # 서명 패드 (Column 사용법 수정)
         col_sig1, col_sig2 = st.columns(2)
         with col_sig1:
             st.write("보호자 서명")
@@ -140,17 +170,14 @@ elif st.session_state.menu == "결석계":
             st.write("학생 서명")
             s_canvas = st_canvas(height=100, width=200, stroke_width=3, key="s_sig", background_color="rgba(0,0,0,0)")
 
-        # 폼의 마지막은 반드시 이 버튼이어야 합니다.
         submit = st.form_submit_button("✅ 결석신고서 제출 및 저장")
 
         if submit:
             if not g_name or calc_days == 0:
                 st.error("보호자 성함과 날짜를 다시 확인해 주세요.")
             else:
-                # 데이터 정리
-                name_only = sel_student.split("(")[0]
-                num_only = int(sel_student.split("(")[1].replace("번)", ""))
-                img_text = encode_image(proof_file)
+                # [압축 함수 호출]
+                img_text = encode_image_compressed(proof_file)
                 
                 def process_sig(canvas):
                     img = Image.fromarray(canvas.image_data.astype('uint8'), 'RGBA')
@@ -159,31 +186,29 @@ elif st.session_state.menu == "결석계":
                     return buf
 
                 report_data = {
-                    "num": num_only, "name": name_only,
+                    "num": int(sel_student.split("(")[1].replace("번)", "")), 
+                    "name": sel_student.split("(")[0],
                     "s_m": start_date.month, "s_d": start_date.day,
                     "e_m": end_date.month, "e_d": end_date.day,
                     "days": calc_days, "g_name": g_name
                 }
 
-                # PDF 생성
                 pdf_gen = SchoolPDF()
                 st.session_state.pdf_data = pdf_gen.generate_report(report_data, process_sig(g_canvas), process_sig(s_canvas))
 
-                # 구글 시트 저장
                 try:
                     existing = conn.read(ttl=0)
                     new_row = pd.DataFrame([{
                         "제출일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "이름": name_only, "번호": num_only, "보호자": g_name,
+                        "이름": report_data["name"], "번호": report_data["num"], "보호자": g_name,
                         "결석기간": f"{start_date}~{end_date}", "일수": calc_days,
                         "상세사유": reason_detail, "증빙서류데이터": img_text
                     }])
                     conn.update(data=pd.concat([existing, new_row], ignore_index=True))
-                    st.success("데이터가 성공적으로 시트에 기록되었습니다!")
+                    st.success("성공적으로 제출되었습니다!")
                 except Exception as e:
                     st.error(f"시트 저장 실패: {e}")
 
-# 다운로드 버튼 (Form 밖)
 if st.session_state.pdf_data:
     st.download_button(
         label="📄 완성된 결석신고서 다운로드",
