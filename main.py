@@ -65,41 +65,41 @@ class SchoolPDF(FPDF):
 
         # --- [보정된 좌표값] ---
         # 1. 인적사항
-        self.text(98, 53, data['dept'])      
-        self.text(140, 53, str(data['grade'])) 
-        self.text(162, 53, str(data['cls']))   
-        self.text(178, 53, str(data['num']))   
+        self.text(98, 55, data['dept'])      
+        self.text(140, 55, str(data['grade'])) 
+        self.text(161, 55, str(data['cls']))   
+        self.text(177, 55, str(data['num']))   
         
         # 2. 성명
         self.set_font('Nanum', '', 15)
-        self.text(150, 63, data['name'])
+        self.text(150, 65, data['name'])
         
         # 3. 결석 날짜
         self.set_font('Nanum', '', 12)
         self.text(146, 77, str(data['s_m'])) 
-        self.text(164, 77, str(data['s_d'])) 
-        self.text(28, 83, str(data['e_m']))  
-        self.text(48, 83, str(data['e_d']))  
-        self.text(75, 83, str(data['days'])) 
+        self.text(163, 77, str(data['s_d'])) 
+        self.text(28, 85, str(data['e_m']))  
+        self.text(48, 85, str(data['e_d']))  
+        self.text(75, 85, str(data['days'])) 
         
         # 4. 중간 제출 날짜
         today = datetime.now()
-        self.text(158, 117, str(today.month))
-        self.text(158, 12, str(today.day))
+        self.text(105, 105, str(today.month))
+        self.text(118, 105, str(today.day))
 
         # 5. 보호자 성함 및 서명
-        self.text(118, 138, data['g_name']) 
+        self.text(158, 119, data['g_name']) 
         if g_sig:
-            self.image(g_sig, x=174, y=129, w=20) 
+            self.image(g_sig, x=174, y=112, w=20) 
             
         # 6. 학생 성함 및 서명
-        self.text(127, 153, data['name'])   
+        self.text(158, 128, data['name'])   
         if s_sig:
-            self.image(s_sig, x=174, y=144, w=20)
+            self.image(s_sig, x=174, y=122, w=20)
 
         # 7. 맨 아래 하단 날짜
-        self.text(106, 248, str(today.month))
-        self.text(119, 248, str(today.day))
+        self.text(105.5, 250, str(today.month))
+        self.text(118.5, 250, str(today.day))
 
         return bytes(self.output())
 
