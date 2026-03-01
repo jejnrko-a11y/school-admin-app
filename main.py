@@ -11,10 +11,10 @@ import os
 # ==========================================
 # 1. 초기 설정 및 학생 명부
 # ==========================================
-st.set_page_config(page_title="경기기계공고 행정 자동화", layout="centered")
+st.set_page_config(page_title="경기기계공고 컴퓨터전자과 3-2반", layout="centered")
 
 # [고정 정보]
-FIXED_DEPT = "컴퓨터전자과"
+FIXED_DEPT = "컴퓨터전자"
 FIXED_GRADE = 3
 FIXED_CLASS = 2
 
@@ -71,7 +71,7 @@ class SchoolPDF(FPDF):
         self.set_font('Nanum', '', 13)
 
         # --- [보정된 좌표값] ---
-        # 1. 인적사항 (고정값 반영)
+        # 1. 인적사항 
         self.text(98, 55, FIXED_DEPT)      
         self.text(140, 55, str(FIXED_GRADE)) 
         self.text(161, 55, str(FIXED_CLASS))   
@@ -86,8 +86,8 @@ class SchoolPDF(FPDF):
         self.text(146, 77, str(data['s_m'])) 
         self.text(163, 77, str(data['s_d'])) 
         self.text(28, 85, str(data['e_m']))  
-        self.text(47, 85, str(data['e_d']))  
-        self.text(74, 85, str(data['days'])) 
+        self.text(45, 85, str(data['e_d']))  
+        self.text(72, 85, str(data['days'])) 
         
         # 4. 중간 제출 날짜 (한글 형식)
         today = datetime.now()
@@ -95,18 +95,18 @@ class SchoolPDF(FPDF):
         self.text(117.8, 105, str(today.day))
 
         # 5. 보호자 성함 및 투명 서명
-        self.text(158, 117, data['g_name']) 
+        self.text(159, 117, data['g_name']) 
         if g_sig:
             self.image(g_sig, x=174, y=112, w=18) 
             
         # 6. 학생 성함 및 투명 서명
-        self.text(158, 126, data['name'])   
+        self.text(159, 126, data['name'])   
         if s_sig:
             self.image(s_sig, x=174, y=122, w=18)
 
         # 7. 맨 아래 하단 날짜
-        self.text(105.5, 248, str(today.month))
-        self.text(118.5, 248, str(today.day))
+        self.text(105.2, 249, str(today.month))
+        self.text(118.5, 249, str(today.day))
 
         return bytes(self.output())
 
@@ -116,7 +116,7 @@ class SchoolPDF(FPDF):
 if 'pdf_data' not in st.session_state: st.session_state.pdf_data = None
 if 'menu' not in st.session_state: st.session_state.menu = "메인 화면"
 
-st.title("🏫 경기기계공고 행정 시스템")
+st.title("🏫 경기기계공고 컴퓨터전자과 3-2반")
 
 debug_mode = st.checkbox("🔍 좌표 가이드 보기 (개발자용)")
 
@@ -134,7 +134,7 @@ elif st.session_state.menu == "결석계":
         st.rerun()
 
     with st.form("absence_form"):
-        st.subheader("📍 1. 인적사항 (컴퓨터전자과 3-2 고정)")
+        st.subheader("📍 1. 인적사항 ")
         
         # [학생 선택 명부]
         selected_student = st.selectbox("학생 이름을 선택하세요", STUDENT_OPTIONS)
@@ -142,7 +142,7 @@ elif st.session_state.menu == "결석계":
         name_only = selected_student.split("(")[0]
         num_only = int(selected_student.split("(")[1].replace("번)", ""))
 
-        st.subheader("📅 2. 결석 날짜 (자동 일수 계산)")
+        st.subheader("📅 2. 결석 날짜 ")
         d1, d2 = st.columns(2)
         start_date = d1.date_input("결석 시작일", format="YYYY/MM/DD")
         end_date = d2.date_input("결석 종료일", format="YYYY/MM/DD")
@@ -155,7 +155,7 @@ elif st.session_state.menu == "결석계":
         st.write(f"👉 선택된 결석 일수: **{calc_days}일**")
 
         st.subheader("✍️ 3. 보호자 및 학생 서명")
-        g_name = st.text_input("보호자 성함")
+        g_name = st.text_input("보호자 성함 ")
         
         col_sig1, col_sig2 = st.columns(2)
         with col_sig1:
