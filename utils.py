@@ -160,7 +160,7 @@ class SchoolPDF(FPDF):
         # 교사용 관리 페이지에서 생성할 때만 담임 성함 추가
         if is_admin:
             self.set_font('Nanum', '', 14)
-            self.text(160, 258, "선생님")
+            self.text(160, 258, "교사")
 
         # --- 2페이지 이후: 증빙서류 ---
         if evidence_io_list:
