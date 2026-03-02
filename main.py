@@ -47,7 +47,7 @@ try:
 except:
     pass
 
-# [고화질 분할 방식] 이미지 처리 함수
+# [스캔 모드 업그레이드] 이미지 처리 함수
 def process_image_high_quality(image_data, mode="evidence"):
     if image_data is None: return ["", "", ""]
     try:
@@ -58,27 +58,34 @@ def process_image_high_quality(image_data, mode="evidence"):
             img.save(buf, format="PNG")
             return base64.b64encode(buf.getvalue()).decode()
         else:
-            # --- 증빙서류 고화질 업그레이드 로직 ---
+            # --- 고성능 문서 스캔 보정 로직 ---
             img = Image.open(image_data)
-            img = ImageOps.exif_transpose(img)
-            img = ImageOps.grayscale(img)
-            # 대비와 선명도를 높여 글자를 매우 뚜렷하게 만듦
-            img = ImageEnhance.Contrast(img).enhance(2.0)
-            img = ImageEnhance.Sharpness(img).enhance(2.0)
-
-            # 해상도를 1500px까지 대폭 상향 (기존 800~1200px)
-            quality = 75
+            img = ImageOps.exif_transpose(img) # 방향 자동 수정
+            img = ImageOps.grayscale(img)      # 흑백 변환
+            
+            # 1. 자동 대비 조정 (밝은 곳과 어두운 곳의 차이를 극대화)
+            img = ImageOps.autocontrast(img, cutoff=2)
+            
+            # 2. 그림자 제거 로직 (밝은 회색 영역을 순백색으로 변환)
+            # 160 이상(연한 그림자)의 밝기를 가진 픽셀은 모두 255(흰색)로 처리
+            img = img.point(lambda p: p if p < 165 else 255)
+            
+            # 3. 글자 선명도 및 대비 2차 강화
+            img = ImageEnhance.Contrast(img).enhance(2.5)  # 글자를 더 진하게
+            img = ImageEnhance.Sharpness(img).enhance(2.0) # 외곽선 뚜렷하게
+            
+            # 해상도 설정 (고화질 유지)
             img.thumbnail((1500, 1500), Image.LANCZOS)
             
+            quality = 70
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=quality, optimize=True)
             encoded = base64.b64encode(buf.getvalue()).decode()
             
-            # 텍스트를 45,000자씩 3조각으로 나눔 (총 135,000자 확보)
+            # 분할 저장 로직 (4.5만자씩 3조각)
             chunk_size = 45000
             chunks = [encoded[i:i + chunk_size] for i in range(0, len(encoded), chunk_size)]
             
-            # 만약 사진이 너무 커서 3조각(13.5만자)을 넘어가면 자동으로 품질을 더 낮춤
             while len(chunks) > 3:
                 quality -= 10
                 buf = io.BytesIO()
@@ -86,21 +93,17 @@ def process_image_high_quality(image_data, mode="evidence"):
                 encoded = base64.b64encode(buf.getvalue()).decode()
                 chunks = [encoded[i:i + chunk_size] for i in range(0, len(encoded), chunk_size)]
             
-            # 부족한 조각은 빈칸으로 채워서 3개 리스트로 반환
-            while len(chunks) < 3:
-                chunks.append("")
+            while len(chunks) < 3: chunks.append("")
             return chunks
     except:
         return ["", "", ""]
 
 def decode_image(chunks):
-    # 리스트로 들어온 조각들을 하나로 합쳐서 복구
     if not chunks or not "".join(chunks): return None
     try:
         full_base64 = "".join(chunks)
         return io.BytesIO(base64.b64decode(full_base64))
-    except:
-        return None
+    except: return None
 
 class SchoolPDF(FPDF):
     def __init__(self):
@@ -125,11 +128,11 @@ class SchoolPDF(FPDF):
         if s_sig: self.image(s_sig, x=174, y=122, w=18)
         if evidence_img:
             self.add_page()
-            self.image(evidence_img, x=5, y=5, w=200) # 고화질이라 더 크게 배치
+            self.image(evidence_img, x=5, y=5, w=200) # 증빙서류 가득 차게 배치
         return bytes(self.output())
 
 # ==========================================
-# 3. 앱 UI
+# 3. 앱 화면 컨트롤
 # ==========================================
 st.sidebar.title("🏫 행정 메뉴")
 menu = st.sidebar.radio("이동", ["메인 화면", "결석계 작성", "교사용 관리"])
@@ -142,11 +145,12 @@ if menu == "메인 화면":
     st.session_state.submitted = False
     st.title("🏫 경기기계공고 행정 시스템")
     st.write(f"현재 시간(KST): {get_kst().strftime('%m-%d %H:%M')}")
+    st.success("학생 명부 기반 자동화 시스템입니다.")
 
 elif menu == "결석계 작성":
     if st.session_state.submitted:
         st.title("✅ 제출 완료")
-        st.success(f"{st.session_state.student_name} 학생의 서류가 접수되었습니다.")
+        st.success(f"{st.session_state.student_name} 학생의 서류가 제출되었습니다.")
         st.download_button("📄 통합 결석계 PDF 다운로드", data=st.session_state.pdf_data, 
                            file_name=f"결석계_{st.session_state.student_name}.pdf", use_container_width=True)
         if st.button("새로 작성하기"):
@@ -158,13 +162,14 @@ elif menu == "결석계 작성":
         start_d = c1.date_input("시작일")
         end_d = c2.date_input("종료일")
         calc_days = len(pd.bdate_range(start_d, end_d)) if start_d <= end_d else 0
-        st.info(f"평일 결석 일수: **{calc_days}일**")
+        st.info(f"평일 결석 일수: **{calc_days}일** (토/일 제외)")
 
         with st.form("absence_form"):
             sel_student = st.selectbox("학생 이름 선택", STUDENT_OPTIONS)
             reason_detail = st.text_area("상세 사유")
-            proof_file = st.file_uploader("증빙서류 고화질 사진 첨부", type=['jpg', 'png', 'jpeg'])
+            proof_file = st.file_uploader("증빙서류(진단서 등) 사진 첨부", type=['jpg', 'png', 'jpeg'])
             g_name = st.text_input("보호자 성함")
+            
             sc1, sc2 = st.columns(2)
             with sc1:
                 st.write("보호자 서명")
@@ -175,14 +180,14 @@ elif menu == "결석계 작성":
 
             if st.form_submit_button("✅ 결석신고서 제출"):
                 if not g_name or calc_days == 0:
-                    st.error("보호자 성함과 날짜를 확인해 주세요.")
+                    st.error("입력 정보를 확인해 주세요.")
                 else:
                     try:
                         name_only = sel_student.split("(")[0]
                         num_only = int(sel_student.split("(")[1].replace("번)", ""))
                         st.session_state.student_name = name_only
                         
-                        # 고화질 분할 인코딩
+                        # 지능형 스캔 보정 적용
                         g_b64 = process_image_high_quality(g_canvas.image_data, mode="signature")
                         s_b64 = process_image_high_quality(s_canvas.image_data, mode="signature")
                         proof_chunks = process_image_high_quality(proof_file, mode="evidence")
@@ -190,12 +195,11 @@ elif menu == "결석계 작성":
                         rep_data = {"num": num_only, "name": name_only, "s_m": start_d.month, "s_d": start_d.day,
                                     "e_m": end_d.month, "e_d": end_d.day, "days": calc_days, "g_name": g_name}
                         
-                        # PDF 생성
                         st.session_state.pdf_data = SchoolPDF().generate_report(
                             rep_data, decode_image([g_b64]), decode_image([s_b64]), decode_image(proof_chunks)
                         )
 
-                        # 구글 시트 저장 (분할된 증빙데이터 저장)
+                        # 구글 시트 저장
                         sub_time = get_kst().strftime("%m-%d %H:%M")
                         per_str = f"{start_d.strftime('%m-%d')}~{end_d.strftime('%m-%d')}"
                         existing = conn.read(ttl=0)
@@ -207,7 +211,7 @@ elif menu == "결석계 작성":
                         }])
                         conn.update(data=pd.concat([existing, new_row], ignore_index=True))
                         
-                        send_discord_notification(f"🔔 [결석계 제출] {name_only}({num_only}번) / {per_str} ({calc_days}일)")
+                        send_discord_notification(f"🔔 **[결석계 제출]** {name_only}({num_only}번) / {per_str} ({calc_days}일)")
                         st.session_state.submitted = True
                         st.rerun()
                     except Exception as e:
@@ -232,15 +236,13 @@ elif menu == "교사용 관리":
                             r_d = {"num": int(float(row['번호'])), "name": str(row['이름']), "s_m": sd.month, "s_d": sd.day,
                                   "e_m": ed.month, "e_d": ed.day, "days": int(float(row['일수'])), "g_name": str(row['보호자'])}
                             
-                            # 분할된 증빙 조각들 합치기
                             evidence_chunks = [row.get('증빙_1', ""), row.get('증빙_2', ""), row.get('증빙_3', "")]
-                            
                             admin_pdf = SchoolPDF().generate_report(r_d, decode_image([row.get('보호자서명', "")]), 
                                                                     decode_image([row.get('학생서명', "")]), 
                                                                     decode_image(evidence_chunks))
                             
-                            st.download_button(f"📥 {row['이름']} 고화질 통합 PDF 다운로드", data=admin_pdf, 
+                            st.download_button(f"📥 {row['이름']} 통합 PDF 다운로드", data=admin_pdf, 
                                                file_name=f"{row['이름']}_결석계.pdf", key=f"dl_{i}", use_container_width=True)
-                        except Exception as e: st.error(f"데이터 변환 오류: {e}")
+                        except Exception as e: st.error(f"변환 오류: {e}")
             else: st.info("데이터 없음")
         except Exception as e: st.error(f"로드 실패: {e}")
