@@ -37,7 +37,6 @@ except:
 st.sidebar.title("🏫 행정 메뉴")
 menu = st.sidebar.radio("이동", ["메인 화면", "결석계 작성", "시간표 확인", "자리배치", "교사용 관리"])
 
-# 세션 상태 초기화 (제출 상태 등)
 if 'submitted' not in st.session_state: 
     st.session_state.submitted = False
 
@@ -48,14 +47,13 @@ if menu == "메인 화면":
     st.session_state.submitted = False
     st.title("🏫 경기기계공고 행정 시스템")
     st.write(f"현재 시간(KST): {get_kst().strftime('%m-%d %H:%M')}")
-    st.info("왼쪽 메뉴를 선택하여 업무를 시작하세요.")
+    st.info("원하시는 메뉴를 선택하여 업무를 시작하세요.")
     
-    # 간단한 안내 카드
     col1, col2 = st.columns(2)
     with col1:
-        st.help("결석계는 사진을 여러 장 첨부할 수 있으며, 자동으로 고화질 스캔됩니다.")
+        st.help("결석계는 사진을 여러 장 첨부할 수 있습니다.")
     with col2:
-        st.help("교사용 관리 페이지에서 모든 서류를 PDF로 통합 출력할 수 있습니다.")
+        st.help("교사용 관리 페이지에서 서류를 통합 출력하세요.")
 
 elif menu == "결석계 작성":
     absence.show_page(conn, STUDENT_OPTIONS, FIXED_INFO, PATHS)
