@@ -18,6 +18,7 @@ def send_discord_notification(message):
             requests.post(webhook_url, json={"content": message})
     except: pass
 
+# 여러 장의 이미지를 처리하여 10개의 조각으로 분할
 def process_multiple_images(uploaded_files):
     if not uploaded_files: return [""] * 10
     all_encoded = []
@@ -26,33 +27,42 @@ def process_multiple_images(uploaded_files):
             file.seek(0)
             img = Image.open(file)
             img = ImageOps.exif_transpose(img) 
-            img = img.convert('L') 
+            img = img.convert('L') # 흑백
+            
+            # 그림자 제거 및 스캔 보정
             bg = img.filter(ImageFilter.GaussianBlur(radius=50))
             img = ImageChops.divide(img, bg)
             img = ImageOps.autocontrast(img, cutoff=1)
             img = ImageEnhance.Contrast(img).enhance(2.0)
             img.thumbnail((1100, 1100), Image.LANCZOS)
+            
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=55, optimize=True)
+            # 이미지간 확실한 구분자 사용
             all_encoded.append(base64.b64encode(buf.getvalue()).decode())
         
-        full_string = "IMAGE_SEP".join(all_encoded)
+        # 이미지들을 구분자 'NEXTIMG'로 연결
+        full_string = "NEXTIMG".join(all_encoded)
+        
+        # 45,000자씩 분할 (구글 시트 5만자 제한 안전선)
         chunk_size = 45000
         chunks = [full_string[i:i + chunk_size] for i in range(0, len(full_string), chunk_size)]
+        
         while len(chunks) < 10: chunks.append("")
         return chunks[:10]
-    except: return [""] * 10
+    except Exception as e:
+        return [""] * 10
 
-# [수정] 단일 이미지 복구용 (서명용)
+# [단일 이미지 복구] 서명용
 def decode_image_safe(b64_str):
     if not b64_str or str(b64_str).lower() == 'nan': return None
     try:
         s = str(b64_str).strip()
-        if s.startswith("'"): s = s[1:]
+        while s.startswith("'"): s = s[1:] # 모든 홑따옴표 제거
         return io.BytesIO(base64.b64decode(s))
     except: return None
 
-# [수정] 다중 이미지 복구용 (증빙서류용)
+# [다중 이미지 복구] 증빙서류용 - 2페이지 이후 안나오는 문제 해결 핵심
 def decode_multiple_images_safe(chunks):
     if not chunks: return []
     try:
@@ -60,13 +70,19 @@ def decode_multiple_images_safe(chunks):
         for c in chunks:
             if pd.isna(c) or c is None: continue
             s = str(c).strip()
-            if s.startswith("'"): s = s[1:]
+            # [중요] 각 조각마다 붙어있는 홑따옴표를 모두 제거하고 합쳐야 함
+            while s.startswith("'"): s = s[1:]
             combined_b64 += s
+            
         if not combined_b64: return []
-        image_data_list = combined_b64.split("IMAGE_SEP")
+        
+        # 구분자로 다시 나눔
+        image_data_list = combined_b64.split("NEXTIMG")
         return [io.BytesIO(base64.b64decode(data)) for data in image_data_list if data]
-    except: return []
+    except Exception as e:
+        return []
 
+# 서명 전용 인코딩
 def process_sig(canvas_data):
     if canvas_data is None: return ""
     try:
@@ -86,6 +102,7 @@ class SchoolPDF(FPDF):
             self.add_font('NanumB', '', bold_font_path)
 
     def generate_report(self, data, g_sig_io, s_sig_io, evidence_io_list, fixed_info):
+        # 1페이지
         self.add_page()
         if os.path.exists(self.bg_image_path):
             self.image(self.bg_image_path, x=0, y=0, w=210, h=297)
@@ -100,18 +117,14 @@ class SchoolPDF(FPDF):
         self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
         
-        # [수정] seek(0) 호출 전 객체 확인 (AttributeError 방지)
-        if g_sig_io: 
-            g_sig_io.seek(0)
-            self.image(g_sig_io, x=174, y=111, w=18)
-        if s_sig_io: 
-            s_sig_io.seek(0)
-            self.image(s_sig_io, x=174, y=121, w=18)
+        if g_sig_io: g_sig_io.seek(0); self.image(g_sig_io, x=174, y=111, w=18)
+        if s_sig_io: s_sig_io.seek(0); self.image(s_sig_io, x=174, y=121, w=18)
 
-        if evidence_io_list:
+        # 2페이지 이후 (리스트가 비어있지 않은지 확인 후 루프)
+        if evidence_io_list and len(evidence_io_list) > 0:
             for img_io in evidence_io_list:
                 self.add_page()
-                try: 
+                try:
                     img_io.seek(0)
                     self.image(img_io, x=5, y=5, w=200)
                 except: continue
