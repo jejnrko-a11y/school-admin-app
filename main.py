@@ -22,12 +22,25 @@ def get_kst():
 # [디스코드 알림 함수]
 def send_discord_notification(message):
     try:
+        # 1. Secrets 설정 확인
+        if "discord" not in st.secrets:
+            st.error("❌ Streamlit Secrets에 [discord] 설정이 없습니다!")
+            return
+
         webhook_url = st.secrets["discord"]["webhook_url"]
         data = {"content": message}
-        requests.post(webhook_url, json=data)
+        
+        # 2. 전송 및 응답 확인
+        response = requests.post(webhook_url, json=data)
+        
+        if response.status_code == 204:
+            st.toast("✅ 디스코드 알림 전송 성공!")
+        else:
+            st.error(f"❌ 디스코드 서버 응답 에러: {response.status_code}")
+            st.info(f"서버 메시지: {response.text}")
+            
     except Exception as e:
-        # 알림 실패가 전체 앱 정지로 이어지지 않도록 예외처리만 함
-        pass
+        st.error(f"⚠️ 알림 전송 중 시스템 오류 발생: {e}")
 
 ADMIN_PASSWORD = "1234" 
 FIXED_DEPT = "컴퓨터전자과"
