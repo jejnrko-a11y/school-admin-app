@@ -18,71 +18,55 @@ def send_discord_notification(message):
             requests.post(webhook_url, json={"content": message})
     except: pass
 
-# 이미지 처리 함수 (여러 장 대응 및 10분할)
 def process_multiple_images(uploaded_files):
     if not uploaded_files: return [""] * 10
-    
     all_encoded = []
     try:
         for file in uploaded_files:
             file.seek(0)
             img = Image.open(file)
             img = ImageOps.exif_transpose(img) 
-            img = img.convert('L') # 흑백
-            
-            # 지능형 스캔 보정 (그림자 제거)
+            img = img.convert('L') 
             bg = img.filter(ImageFilter.GaussianBlur(radius=50))
             img = ImageChops.divide(img, bg)
             img = ImageOps.autocontrast(img, cutoff=1)
             img = ImageEnhance.Contrast(img).enhance(2.0)
-            
             img.thumbnail((1100, 1100), Image.LANCZOS)
-            
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=55, optimize=True)
-            # 이미지간 확실한 구분자 사용
             all_encoded.append(base64.b64encode(buf.getvalue()).decode())
         
-        # 구분자로 합치기
         full_string = "IMAGE_SEP".join(all_encoded)
-        
-        # 45,000자씩 분할 (구글 시트 5만자 제한 안전선)
         chunk_size = 45000
         chunks = [full_string[i:i + chunk_size] for i in range(0, len(full_string), chunk_size)]
-        
-        # 10개 칸을 맞추기 위해 빈 문자열 추가
         while len(chunks) < 10: chunks.append("")
         return chunks[:10]
-    except Exception as e:
-        return [""] * 10
+    except: return [""] * 10
 
-# [수정] 복구 로직: 홑따옴표와 NaN 문제를 완벽히 해결
+# [수정] 단일 이미지 복구용 (서명용)
+def decode_image_safe(b64_str):
+    if not b64_str or str(b64_str).lower() == 'nan': return None
+    try:
+        s = str(b64_str).strip()
+        if s.startswith("'"): s = s[1:]
+        return io.BytesIO(base64.b64decode(s))
+    except: return None
+
+# [수정] 다중 이미지 복구용 (증빙서류용)
 def decode_multiple_images_safe(chunks):
     if not chunks: return []
     try:
         combined_b64 = ""
         for c in chunks:
-            # c가 NaN(float)이거나 None이면 무시
-            if pd.isna(c) or c is None:
-                continue
-            
+            if pd.isna(c) or c is None: continue
             s = str(c).strip()
-            # 홑따옴표가 여러 개 붙어있을 경우 모두 제거
-            while s.startswith("'"):
-                s = s[1:]
-            
+            if s.startswith("'"): s = s[1:]
             combined_b64 += s
-            
         if not combined_b64: return []
-        
-        # 구분자로 다시 나눔
         image_data_list = combined_b64.split("IMAGE_SEP")
         return [io.BytesIO(base64.b64decode(data)) for data in image_data_list if data]
-    except Exception as e:
-        st.error(f"데이터 복구 중 오류: {e}")
-        return []
+    except: return []
 
-# 서명 처리 (PNG 투명 유지)
 def process_sig(canvas_data):
     if canvas_data is None: return ""
     try:
@@ -116,15 +100,18 @@ class SchoolPDF(FPDF):
         self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
         
-        # 서명 이미지
-        if g_sig_io: g_sig_io.seek(0); self.image(g_sig_io, x=174, y=111, w=18)
-        if s_sig_io: s_sig_io.seek(0); self.image(s_sig_io, x=174, y=121, w=18)
+        # [수정] seek(0) 호출 전 객체 확인 (AttributeError 방지)
+        if g_sig_io: 
+            g_sig_io.seek(0)
+            self.image(g_sig_io, x=174, y=111, w=18)
+        if s_sig_io: 
+            s_sig_io.seek(0)
+            self.image(s_sig_io, x=174, y=121, w=18)
 
-        # 2페이지 이후 증빙
         if evidence_io_list:
             for img_io in evidence_io_list:
                 self.add_page()
-                try:
+                try: 
                     img_io.seek(0)
                     self.image(img_io, x=5, y=5, w=200)
                 except: continue
