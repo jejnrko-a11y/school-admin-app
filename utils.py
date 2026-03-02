@@ -18,7 +18,7 @@ def send_discord_notification(message):
             requests.post(webhook_url, json={"content": message})
     except: pass
 
-# 여러 장 이미지 처리
+# 이미지 처리: 여러 장을 하나의 문자열로 합치고 안전하게 분할
 def process_multiple_images(uploaded_files):
     if not uploaded_files: return [""] * 10
     all_encoded = []
@@ -27,47 +27,65 @@ def process_multiple_images(uploaded_files):
             file.seek(0)
             img = Image.open(file)
             img = ImageOps.exif_transpose(img) 
-            img = img.convert('L')
+            img = img.convert('L') # 흑백 스캔 모드
+            
+            # 그림자 제거 및 보정
             bg = img.filter(ImageFilter.GaussianBlur(radius=50))
             img = ImageChops.divide(img, bg)
             img = ImageOps.autocontrast(img, cutoff=1)
             img = ImageEnhance.Contrast(img).enhance(2.0)
-            img.thumbnail((1100, 1100), Image.LANCZOS)
+            
+            # 해상도 조절 (가로 1000px)
+            img.thumbnail((1000, 1000), Image.LANCZOS)
+            
             buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=55, optimize=True)
-            # 이미지간 구분자로 | 사용
-            all_encoded.append(base64.b64encode(buf.getvalue()).decode())
+            img.save(buf, format="JPEG", quality=50, optimize=True)
+            # 각 이미지 끝에 고유 구분자 추가
+            all_encoded.append(base64.b64encode(buf.getvalue()).decode() + "END_OF_IMG")
         
-        full_string = "|".join(all_encoded) # 단순한 구분자
+        full_string = "".join(all_encoded)
+        
+        # 45,000자씩 10개 조각으로 분할
         chunk_size = 45000
         chunks = [full_string[i:i + chunk_size] for i in range(0, len(full_string), chunk_size)]
+        
         while len(chunks) < 10: chunks.append("")
         return chunks[:10]
-    except: return [""] * 10
+    except Exception as e:
+        return [""] * 10
 
+# 단일 이미지 복구 (서명용)
 def decode_image_safe(b64_str):
     if not b64_str or str(b64_str).lower() == 'nan': return None
     try:
         s = str(b64_str).strip()
-        while s.startswith("'"): s = s[1:]
+        while s.startswith("'"): s = s[1:] # 엑셀 탈출문자 제거
         return io.BytesIO(base64.b64decode(s))
     except: return None
 
-# 다중 이미지 복구 (| 구분자 기준)
+# 다중 이미지 복구 (증빙서류용 - 2페이지 누락 해결)
 def decode_multiple_images_safe(chunks):
     if not chunks: return []
     try:
-        combined_b64 = ""
+        # 모든 조각을 하나로 합침 (NaN 제외 및 홑따옴표 제거)
+        full_b64 = ""
         for c in chunks:
-            if pd.isna(c) or c is None: continue
+            if pd.isna(c) or str(c).lower() == 'nan': continue
             s = str(c).strip()
             while s.startswith("'"): s = s[1:]
-            combined_b64 += s
-        if not combined_b64: return []
+            full_b64 += s
+            
+        if not full_b64: return []
         
-        image_data_list = combined_b64.split("|") # 파이프로 분리
-        return [io.BytesIO(base64.b64decode(data)) for data in image_data_list if data]
+        # 구분자로 분리하여 이미지 리스트 생성
+        image_data_list = full_b64.split("END_OF_IMG")
+        ios = []
+        for data in image_data_list:
+            if len(data.strip()) > 100: # 의미 있는 데이터만 처리
+                ios.append(io.BytesIO(base64.b64decode(data)))
+        return ios
     except Exception as e:
+        st.error(f"이미지 복구 중 오류: {e}")
         return []
 
 def process_sig(canvas_data):
@@ -89,6 +107,7 @@ class SchoolPDF(FPDF):
             self.add_font('NanumB', '', bold_font_path)
 
     def generate_report(self, data, g_sig_io, s_sig_io, evidence_io_list, fixed_info):
+        # 1페이지
         self.add_page()
         if os.path.exists(self.bg_image_path):
             self.image(self.bg_image_path, x=0, y=0, w=210, h=297)
@@ -102,16 +121,21 @@ class SchoolPDF(FPDF):
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
         self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
-        if g_sig_io: g_sig_io.seek(0); self.image(g_sig_io, x=174, y=111, w=18)
-        if s_sig_io: s_sig_io.seek(0); self.image(s_sig_io, x=174, y=121, w=18)
+        
+        if g_sig_io: 
+            g_sig_io.seek(0)
+            self.image(g_sig_io, x=174, y=111, w=18)
+        if s_sig_io: 
+            s_sig_io.seek(0)
+            self.image(s_sig_io, x=174, y=121, w=18)
 
-        # 여러 장의 이미지를 루프로 돌며 페이지 추가
+        # 2페이지 이후 (반드시 루프를 돌아야 함)
         if evidence_io_list:
             for img_io in evidence_io_list:
                 self.add_page()
                 try:
                     img_io.seek(0)
                     self.image(img_io, x=5, y=5, w=200)
-                except:
+                except Exception as e:
                     continue
         return bytes(self.output())
