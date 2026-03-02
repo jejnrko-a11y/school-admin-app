@@ -18,32 +18,45 @@ def send_discord_notification(message):
             requests.post(webhook_url, json={"content": message})
     except: pass
 
+# [최종 수정] 여러 장의 사진을 10개 조각으로 분할 저장
 def process_multiple_images(uploaded_files):
     if not uploaded_files: return [""] * 10
+    
     all_encoded = []
     try:
         for file in uploaded_files:
             file.seek(0)
             img = Image.open(file)
             img = ImageOps.exif_transpose(img) 
-            img = img.convert('L')
+            img = img.convert('L') # 흑백
+            
+            # 스캔 보정
             bg = img.filter(ImageFilter.GaussianBlur(radius=50))
             img = ImageChops.divide(img, bg)
             img = ImageOps.autocontrast(img, cutoff=1)
-            img = ImageEnhance.Contrast(img).enhance(2.0)
-            img.thumbnail((1100, 1100), Image.Resampling.LANCZOS)
+            img = ImageEnhance.Contrast(img).enhance(1.8)
+            
+            # 화질과 용량의 최종 타협점 (가로 900px)
+            img.thumbnail((900, 900), Image.Resampling.LANCZOS)
+            
             buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=55, optimize=True)
-            # 확실한 구분자 사용
+            img.save(buf, format="JPEG", quality=45, optimize=True) # 압축률 상향
             all_encoded.append(base64.b64encode(buf.getvalue()).decode())
         
-        full_string = "||SPLIT||".join(all_encoded)
-        chunk_size = 45000
+        # 이미지들을 구분자 'NEXT'로 연결
+        full_string = "NEXT".join(all_encoded)
+        
+        # 구글 시트 안전선인 44,000자씩 분할
+        chunk_size = 44000
         chunks = [full_string[i:i + chunk_size] for i in range(0, len(full_string), chunk_size)]
+        
         while len(chunks) < 10: chunks.append("")
         return chunks[:10]
-    except: return [""] * 10
+    except Exception as e:
+        st.error(f"이미지 변환 에러: {e}")
+        return [""] * 10
 
+# 단일 복구
 def decode_image_safe(b64_str):
     if not b64_str or str(b64_str).lower() == 'nan': return None
     try:
@@ -52,6 +65,7 @@ def decode_image_safe(b64_str):
         return io.BytesIO(base64.b64decode(s))
     except: return None
 
+# 다중 복구 (NEXT 구분자 기준)
 def decode_multiple_images_safe(chunks):
     if not chunks: return []
     try:
@@ -61,10 +75,14 @@ def decode_multiple_images_safe(chunks):
             s = str(c).strip()
             while s.startswith("'"): s = s[1:]
             combined_b64 += s
+            
         if not combined_b64: return []
-        image_data_list = combined_b64.split("||SPLIT||")
+        
+        # 구분자로 다시 나눔
+        image_data_list = combined_b64.split("NEXT")
         return [io.BytesIO(base64.b64decode(data)) for data in image_data_list if data]
-    except: return []
+    except Exception as e:
+        return []
 
 def process_sig(canvas_data):
     if canvas_data is None: return ""
@@ -84,7 +102,7 @@ class SchoolPDF(FPDF):
             self.add_font('Nanum', '', font_path)
             self.add_font('NanumB', '', bold_font_path)
 
-    def generate_report(self, data, g_sig_io, s_sig_io, evidence_io_list, fixed_info, is_admin=False):
+    def generate_report(self, data, g_sig_io, s_sig_io, evidence_io_list, fixed_info):
         self.add_page()
         if os.path.exists(self.bg_image_path):
             self.image(self.bg_image_path, x=0, y=0, w=210, h=297)
@@ -101,8 +119,6 @@ class SchoolPDF(FPDF):
         
         if g_sig_io: g_sig_io.seek(0); self.image(g_sig_io, x=174, y=111, w=18)
         if s_sig_io: s_sig_io.seek(0); self.image(s_sig_io, x=174, y=121, w=18)
-        if is_admin:
-            self.set_font('Nanum', '', 14); self.text(160, 258, "교사")
 
         if evidence_io_list:
             for img_io in evidence_io_list:
