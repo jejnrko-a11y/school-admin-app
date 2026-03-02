@@ -35,7 +35,7 @@ def login_page():
     for _, row in df_students.iterrows():
         name = str(row['이름'])
         num_raw = str(row['번호']).replace('.0', '')
-        if num_raw == 'nan' or name == '선생님':
+        if num_raw == 'nan' or name == '교사':
             student_options.append(name)
         else:
             student_options.append(f"{name}({num_raw}번)")
