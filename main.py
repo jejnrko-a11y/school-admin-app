@@ -8,6 +8,7 @@ from PIL import Image, ImageOps, ImageEnhance
 import io
 import os
 import base64
+import requests # 디스코드 알림 전송을 위해 필요
 
 # ==========================================
 # 1. 초기 설정 및 한국 시간
@@ -15,11 +16,20 @@ import base64
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
 def get_kst():
-    # 서버 시간에 관계없이 한국 시간(KST)으로 계산
+    # 서버 시간에 9시간을 더해 한국 시간 반환
     return datetime.utcnow() + timedelta(hours=9)
 
-ADMIN_PASSWORD = "1234" 
+# [디스코드 알림 함수]
+def send_discord_notification(message):
+    try:
+        webhook_url = st.secrets["discord"]["webhook_url"]
+        data = {"content": message}
+        requests.post(webhook_url, json=data)
+    except Exception as e:
+        # 알림 실패가 전체 앱 정지로 이어지지 않도록 예외처리만 함
+        pass
 
+ADMIN_PASSWORD = "1234" 
 FIXED_DEPT = "컴퓨터전자과"
 FIXED_GRADE = 3
 FIXED_CLASS = 2
@@ -40,7 +50,7 @@ try:
 except:
     pass
 
-# 이미지 처리 함수 (화질 최적화)
+# --- 이미지 처리 및 PDF 클래스는 기존과 동일 (생략 없이 포함) ---
 def process_image(image_data, mode="evidence"):
     if image_data is None: return ""
     try:
@@ -54,13 +64,9 @@ def process_image(image_data, mode="evidence"):
             img = Image.open(image_data)
             img = ImageOps.exif_transpose(img)
             img = ImageOps.grayscale(img)
-            img = ImageEnhance.Contrast(img).enhance(2.2) 
-            img = ImageEnhance.Sharpness(img).enhance(2.0) 
-
-            max_chars = 49500
-            quality = 70
-            size = 1200
-            
+            img = ImageEnhance.Contrast(img).enhance(2.0)
+            img = ImageEnhance.Sharpness(img).enhance(1.5)
+            max_chars, quality, size = 49500, 70, 1200
             while True:
                 temp_img = img.copy()
                 temp_img.thumbnail((size, size), Image.LANCZOS)
@@ -75,26 +81,19 @@ def process_image(image_data, mode="evidence"):
 
 def decode_image(base64_string):
     if not base64_string: return None
-    try:
-        return io.BytesIO(base64.b64decode(base64_string))
+    try: return io.BytesIO(base64.b64decode(base64_string))
     except: return None
 
-# ==========================================
-# 2. PDF 생성 클래스 (좌표 유지)
-# ==========================================
 class SchoolPDF(FPDF):
     def __init__(self):
         super().__init__(orientation='P', unit='mm', format='A4')
         if os.path.exists(font_path):
             self.add_font('Nanum', '', font_path)
             self.add_font('NanumB', '', bold_font_path)
-
     def generate_report(self, data, g_sig, s_sig, evidence_img=None):
         self.add_page()
-        if os.path.exists(bg_image_path):
-            self.image(bg_image_path, x=0, y=0, w=210, h=297)
-        self.set_text_color(0, 0, 0)
-        self.set_font('Nanum', '', 13)
+        if os.path.exists(bg_image_path): self.image(bg_image_path, x=0, y=0, w=210, h=297)
+        self.set_text_color(0, 0, 0); self.set_font('Nanum', '', 13)
         self.text(98, 55, FIXED_DEPT); self.text(140, 55, str(FIXED_GRADE))
         self.text(161, 55, str(FIXED_CLASS)); self.text(177, 55, str(data['num']))
         self.set_font('Nanum', '', 15); self.text(150, 65, data['name'])
@@ -112,7 +111,7 @@ class SchoolPDF(FPDF):
         return bytes(self.output())
 
 # ==========================================
-# 3. 앱 UI 및 로직
+# 3. 앱 UI 및 메인 로직
 # ==========================================
 st.sidebar.title("🏫 행정 메뉴")
 menu = st.sidebar.radio("이동", ["메인 화면", "결석계 작성", "교사용 관리"])
@@ -169,36 +168,29 @@ elif menu == "결석계 작성":
                     s_b64 = process_image(s_canvas.image_data, mode="signature")
                     proof_b64 = process_image(proof_file, mode="evidence")
 
-                    # PDF용 데이터 구성
                     rep_data = {"num": num_only, "name": name_only, "s_m": start_d.month, "s_d": start_d.day,
                                 "e_m": end_d.month, "e_d": end_d.day, "days": calc_days, "g_name": g_name}
-                    
                     st.session_state.pdf_data = SchoolPDF().generate_report(rep_data, decode_image(g_b64), decode_image(s_b64), decode_image(proof_b64))
 
-                    # [수정] 엑셀 데이터 저장 (순서 재배열 및 년도 제외 날짜 형식)
                     try:
-                        submission_time = get_kst().strftime("%m-%d %H:%M") # 월-일 시:분
-                        period_str = f"{start_d.strftime('%m-%d')}~{end_d.strftime('%m-%d')}" # 월-일~월-일
+                        submission_time = get_kst().strftime("%m-%d %H:%M")
+                        period_str = f"{start_d.strftime('%m-%d')}~{end_d.strftime('%m-%d')}"
                         
                         existing = conn.read(ttl=0)
-                        # 요청하신 순서대로 컬럼 정렬
                         new_row = pd.DataFrame([{
-                            "결석기간": period_str,
-                            "일수": calc_days,
-                            "이름": name_only,
-                            "번호": num_only,
-                            "보호자": g_name,
-                            "상세사유": reason_detail,
-                            "제출일시": submission_time,
-                            "학생서명": s_b64,
-                            "보호자서명": g_b64,
-                            "증빙서류데이터": proof_b64
+                            "결석기간": period_str, "일수": calc_days, "이름": name_only, "번호": num_only,
+                            "보호자": g_name, "상세사유": reason_detail, "제출일시": submission_time,
+                            "학생서명": s_b64, "보호자서명": g_b64, "증빙서류데이터": proof_b64
                         }])
                         conn.update(data=pd.concat([existing, new_row], ignore_index=True))
+                        
+                        # [알림 전송] 제출 완료 시 디스코드로 알림 쏘기
+                        notif_text = f"🔔 **[결석계 제출]** {name_only}({num_only}번) 학생\n📅 기간: {period_str} ({calc_days}일간)\n❓ 사유: {reason_cat}\n📝 시간: {submission_time}"
+                        send_notification = send_discord_notification(notif_text)
+
                         st.session_state.submitted = True
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"⚠️ 저장 실패: {e}")
+                    except Exception as e: st.error(f"저장 실패: {e}")
 
 elif menu == "교사용 관리":
     st.title("👨‍🏫 교사용 관리")
@@ -207,30 +199,23 @@ elif menu == "교사용 관리":
         try:
             data = conn.read(ttl=0)
             if not data.empty:
-                # 제출일시 기준 내림차순 정렬 (월-일 형식이라도 문자열 정렬 가능)
                 data = data.sort_values(by='제출일시', ascending=False)
                 for i, row in data.iterrows():
                     with st.expander(f"📌 {row['제출일시']} - {row['이름']} 학생"):
                         try:
-                            # 엑셀의 월-일 형식을 다시 PDF용 연/월/일 정보로 분석
-                            # (년도는 현재 년도로 가정)
                             current_year = get_kst().year
                             sd_part = row['결석기간'].split('~')[0]
                             ed_part = row['결석기간'].split('~')[1] if '~' in row['결석기간'] else sd_part
-                            
                             sd = datetime.strptime(f"{current_year}-{sd_part}", "%Y-%m-%d")
                             ed = datetime.strptime(f"{current_year}-{ed_part}", "%Y-%m-%d")
-                            
                             r_data = {"num": int(float(row['번호'])), "name": str(row['이름']), 
                                       "s_m": sd.month, "s_d": sd.day, "e_m": ed.month, "e_d": ed.day,
                                       "days": int(float(row['일수'])), "g_name": str(row['보호자'])}
-                            
                             admin_pdf = SchoolPDF().generate_report(r_data, decode_image(row.get('보호자서명')), 
                                                                     decode_image(row.get('학생서명')), 
                                                                     decode_image(row.get('증빙서류데이터')))
-                            
                             st.download_button(f"📥 {row['이름']} 통합 PDF 다운로드", data=admin_pdf, 
                                                file_name=f"{row['이름']}_결석계.pdf", key=f"dl_{i}", use_container_width=True)
-                        except Exception as e: st.error(f"오류: {e}")
-            else: st.info("데이터가 없습니다.")
+                        except: st.error("PDF 변환 오류")
+            else: st.info("데이터 없음")
         except: st.error("시트 로드 실패")
