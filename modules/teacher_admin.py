@@ -10,7 +10,8 @@ def show_page(conn, password, fixed_info, paths):
     pw = st.text_input("비밀번호", type="password")
     if pw == password:
         try:
-            data = conn.read(ttl=0)
+            # [핵심] 결석명부 시트에서 읽기
+            data = conn.read(worksheet="결석명부", ttl=0)
             if not data.empty:
                 data = data.sort_values(by='제출일시', ascending=False)
                 for i, row in data.iterrows():
@@ -24,18 +25,15 @@ def show_page(conn, password, fixed_info, paths):
                             r_d = {"num": int(float(row['번호'])), "name": str(row['이름']), "s_m": sd.month, "s_d": sd.day,
                                   "e_m": ed.month, "e_d": ed.day, "days": int(float(row['일수'])), "g_name": str(row['보호자'])}
                             
-                            # 10개 조각 리스트로 모으기
                             ev_chunks = [row.get(f'증빙_{k}', "") for k in range(1, 11)]
                             
                             admin_pdf = SchoolPDF(paths['font'], paths['bold_font'], paths['bg']).generate_report(
-                                r_d, 
-                                decode_image_safe(row.get('보호자서명', "")), 
+                                r_d, decode_image_safe(row.get('보호자서명', "")), 
                                 decode_image_safe(row.get('학생서명', "")), 
-                                decode_multiple_images_safe(ev_chunks),
-                                fixed_info
+                                decode_multiple_images_safe(ev_chunks), fixed_info
                             )
                             st.download_button(f"📥 {row['이름']} 통합 PDF 다운로드", data=admin_pdf, 
                                                file_name=f"{row['이름']}_결석계.pdf", key=f"dl_{i}", use_container_width=True)
                         except Exception as e: st.error(f"변환 오류: {e}")
             else: st.info("데이터 없음")
-        except: st.error("시트 로드 실패")
+        except Exception as e: st.error(f"시트 로드 실패: {e}")
