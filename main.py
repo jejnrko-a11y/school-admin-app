@@ -125,3 +125,7 @@ else:
 
     elif menu == "교사용 관리":
         teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
+        
+    elif menu == "시간표 확인":
+        from modules import timetable
+        timetable.show_page(conn)        
