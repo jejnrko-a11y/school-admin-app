@@ -18,61 +18,43 @@ def send_discord_notification(message):
             requests.post(webhook_url, json={"content": message})
     except: pass
 
-# [중요] 여러 장 이미지 처리 로직 강화
 def process_multiple_images(uploaded_files):
-    if not uploaded_files:
-        return [""] * 10
-    
+    if not uploaded_files: return [""] * 10
     all_encoded = []
     try:
         for file in uploaded_files:
             file.seek(0)
             img = Image.open(file)
-            img = ImageOps.exif_transpose(img) # 회전 방지
-            img = img.convert('L') # 흑백
-            
-            # 스캔 보정 (그림자 제거)
+            img = ImageOps.exif_transpose(img) 
+            img = img.convert('L')
+            # 스캔 보정
             bg = img.filter(ImageFilter.GaussianBlur(radius=50))
             img = ImageChops.divide(img, bg)
             img = ImageOps.autocontrast(img, cutoff=1)
             img = ImageEnhance.Contrast(img).enhance(1.8)
-            
-            # 해상도 조절 (가로 1000px)
             img.thumbnail((1000, 1000), Image.LANCZOS)
             
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=50, optimize=True)
-            # 이미지간 구분자 '|' 사용 (Base64에 없는 문자)
-            encoded_str = base64.b64encode(buf.getvalue()).decode()
-            if encoded_str:
-                all_encoded.append(encoded_str)
+            all_encoded.append(base64.b64encode(buf.getvalue()).decode())
         
-        if not all_encoded:
-            return [""] * 10
-            
         full_string = "|".join(all_encoded)
-        
-        # 45,000자씩 분할
         chunk_size = 45000
         chunks = [full_string[i:i + chunk_size] for i in range(0, len(full_string), chunk_size)]
-        
         while len(chunks) < 10: chunks.append("")
         return chunks[:10]
     except Exception as e:
-        st.error(f"이미지 변환 중 오류: {e}")
+        st.error(f"이미지 변환 실패: {e}")
         return [""] * 10
 
-# 단일 이미지 복구 (서명)
 def decode_image_safe(b64_str):
-    if not b64_str or str(b64_str).lower() == 'nan' or str(b64_str).strip() == "":
-        return None
+    if not b64_str or str(b64_str).lower() == 'nan': return None
     try:
         s = str(b64_str).strip()
         while s.startswith("'"): s = s[1:]
         return io.BytesIO(base64.b64decode(s))
     except: return None
 
-# 다중 이미지 복구 (증빙)
 def decode_multiple_images_safe(chunks):
     if not chunks: return []
     try:
@@ -82,18 +64,11 @@ def decode_multiple_images_safe(chunks):
             s = str(c).strip()
             while s.startswith("'"): s = s[1:]
             combined_b64 += s
-            
         if not combined_b64: return []
-        
         image_data_list = combined_b64.split("|")
-        ios = []
-        for data in image_data_list:
-            if len(data.strip()) > 100:
-                ios.append(io.BytesIO(base64.b64decode(data)))
-        return ios
+        return [io.BytesIO(base64.b64decode(data)) for data in image_data_list if data]
     except: return []
 
-# 서명 처리
 def process_sig(canvas_data):
     if canvas_data is None: return ""
     try:
@@ -126,15 +101,11 @@ class SchoolPDF(FPDF):
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
         self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
-        
         if g_sig_io: g_sig_io.seek(0); self.image(g_sig_io, x=174, y=111, w=18)
         if s_sig_io: s_sig_io.seek(0); self.image(s_sig_io, x=174, y=121, w=18)
-
         if evidence_io_list:
             for img_io in evidence_io_list:
                 self.add_page()
-                try:
-                    img_io.seek(0)
-                    self.image(img_io, x=5, y=5, w=200)
+                try: img_io.seek(0); self.image(img_io, x=5, y=5, w=200)
                 except: continue
         return bytes(self.output())
