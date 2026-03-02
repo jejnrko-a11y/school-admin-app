@@ -8,11 +8,9 @@ import base64
 import requests
 import os
 
-# 한국 시간 계산
 def get_kst():
     return datetime.utcnow() + timedelta(hours=9)
 
-# 디스코드 알림
 def send_discord_notification(message):
     try:
         if "discord" in st.secrets:
@@ -20,59 +18,85 @@ def send_discord_notification(message):
             requests.post(webhook_url, json={"content": message})
     except: pass
 
-# 이미지 인코딩 (고화질 스캔 + 분할)
-def process_image_advanced(image_data, mode="evidence"):
-    if image_data is None: return ["", "", ""] if mode == "evidence" else ""
+# 이미지 처리 함수 (여러 장 대응 및 10분할)
+def process_multiple_images(uploaded_files):
+    if not uploaded_files: return [""] * 10
+    
+    all_encoded = []
     try:
-        if mode == "signature":
-            img = Image.fromarray(image_data.astype('uint8'), 'RGBA')
-            img.thumbnail((250, 150))
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            return base64.b64encode(buf.getvalue()).decode()
-        else:
-            if hasattr(image_data, 'seek'): image_data.seek(0)
-            img = Image.open(image_data)
-            img = ImageOps.exif_transpose(img)
-            img = img.convert('L')
+        for file in uploaded_files:
+            file.seek(0)
+            img = Image.open(file)
+            img = ImageOps.exif_transpose(img) 
+            img = img.convert('L') # 흑백
+            
+            # 지능형 스캔 보정 (그림자 제거)
             bg = img.filter(ImageFilter.GaussianBlur(radius=50))
             img = ImageChops.divide(img, bg)
-            img = ImageOps.autocontrast(img, cutoff=2)
-            img = ImageEnhance.Contrast(img).enhance(2.5)
-            img = ImageEnhance.Sharpness(img).enhance(2.0)
-            img.thumbnail((1500, 1500), Image.LANCZOS)
-            quality = 70
+            img = ImageOps.autocontrast(img, cutoff=1)
+            img = ImageEnhance.Contrast(img).enhance(2.0)
+            
+            img.thumbnail((1100, 1100), Image.LANCZOS)
+            
             buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=quality, optimize=True)
-            encoded = base64.b64encode(buf.getvalue()).decode()
-            chunk_size = 45000
-            chunks = [encoded[i:i + chunk_size] for i in range(0, len(encoded), chunk_size)]
-            while len(chunks) < 10: chunks.append("")
-            return chunks[:10]
-    except: return [""] * 10 if mode == "evidence" else ""
+            img.save(buf, format="JPEG", quality=55, optimize=True)
+            # 이미지간 확실한 구분자 사용
+            all_encoded.append(base64.b64encode(buf.getvalue()).decode())
+        
+        # 구분자로 합치기
+        full_string = "IMAGE_SEP".join(all_encoded)
+        
+        # 45,000자씩 분할 (구글 시트 5만자 제한 안전선)
+        chunk_size = 45000
+        chunks = [full_string[i:i + chunk_size] for i in range(0, len(full_string), chunk_size)]
+        
+        # 10개 칸을 맞추기 위해 빈 문자열 추가
+        while len(chunks) < 10: chunks.append("")
+        return chunks[:10]
+    except Exception as e:
+        return [""] * 10
 
-# 이미지 복구
-def decode_image_safe(chunks):
-    if chunks is None: return None
-    if isinstance(chunks, str): chunks = [chunks]
+# [수정] 복구 로직: 홑따옴표와 NaN 문제를 완벽히 해결
+def decode_multiple_images_safe(chunks):
+    if not chunks: return []
     try:
         combined_b64 = ""
         for c in chunks:
+            # c가 NaN(float)이거나 None이면 무시
+            if pd.isna(c) or c is None:
+                continue
+            
             s = str(c).strip()
-            if s.lower() == 'nan' or not s: continue
-            if s.startswith("'"): s = s[1:]
+            # 홑따옴표가 여러 개 붙어있을 경우 모두 제거
+            while s.startswith("'"):
+                s = s[1:]
+            
             combined_b64 += s
-        if not combined_b64: return None
-        return io.BytesIO(base64.b64decode(combined_b64))
-    except: return None
+            
+        if not combined_b64: return []
+        
+        # 구분자로 다시 나눔
+        image_data_list = combined_b64.split("IMAGE_SEP")
+        return [io.BytesIO(base64.b64decode(data)) for data in image_data_list if data]
+    except Exception as e:
+        st.error(f"데이터 복구 중 오류: {e}")
+        return []
 
-# PDF 클래스
+# 서명 처리 (PNG 투명 유지)
+def process_sig(canvas_data):
+    if canvas_data is None: return ""
+    try:
+        img = Image.fromarray(canvas_data.astype('uint8'), 'RGBA')
+        img.thumbnail((250, 150))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode()
+    except: return ""
+
 class SchoolPDF(FPDF):
     def __init__(self, font_path, bold_font_path, bg_image_path):
         super().__init__(orientation='P', unit='mm', format='A4')
-        self.font_path = font_path
-        self.bold_font_path = bold_font_path
-        self.bg_image_path = bg_image_path
+        self.font_path, self.bold_font_path, self.bg_image_path = font_path, bold_font_path, bg_image_path
         if os.path.exists(font_path):
             self.add_font('Nanum', '', font_path)
             self.add_font('NanumB', '', bold_font_path)
@@ -91,11 +115,17 @@ class SchoolPDF(FPDF):
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
         self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
+        
+        # 서명 이미지
         if g_sig_io: g_sig_io.seek(0); self.image(g_sig_io, x=174, y=111, w=18)
         if s_sig_io: s_sig_io.seek(0); self.image(s_sig_io, x=174, y=121, w=18)
+
+        # 2페이지 이후 증빙
         if evidence_io_list:
             for img_io in evidence_io_list:
                 self.add_page()
-                try: img_io.seek(0); self.image(img_io, x=5, y=5, w=200)
+                try:
+                    img_io.seek(0)
+                    self.image(img_io, x=5, y=5, w=200)
                 except: continue
         return bytes(self.output())
