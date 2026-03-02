@@ -21,13 +21,18 @@ try:
 except:
     pass
 
+# --- [수정] 학생 명부를 캐시를 써서 안전하게 가져오는 함수 ---
+@st.cache_data(ttl=600) # 10분 동안 구글 시트에 재요청하지 않음
+def get_cached_student_list():
+    return conn.read(worksheet="학생명부")
+
 # --- 로그인 페이지 함수 ---
 def login_page():
     st.title("🏫 경기기계공고 학생 인증")
     try:
-        # 구글 시트의 '학생명부' 탭 읽기
-        df_students = conn.read(worksheet="학생명부", ttl=0)
-        # 이름(번호번) 형식으로 옵션 생성 (선생님은 번호 제외)
+        # 캐시된 데이터 읽기
+        df_students = get_cached_student_list()
+        
         student_options = []
         for _, row in df_students.iterrows():
             if pd.isna(row['번호']):
@@ -35,7 +40,11 @@ def login_page():
             else:
                 student_options.append(f"{row['이름']}({int(row['번호'])}번)")
     except Exception as e:
-        st.error(f"학생 명부를 불러올 수 없습니다: {e}")
+        # 에러가 Quota 문제일 경우 안내 메시지 출력
+        if "429" in str(e):
+            st.error("⚠️ 접속자가 많아 잠시 서비스가 지연되고 있습니다. 1분 후 새로고침(F5) 해주세요.")
+        else:
+            st.error(f"학생 명부를 불러올 수 없습니다: {e}")
         return
 
     with st.container(border=True):
@@ -46,7 +55,6 @@ def login_page():
             name_only = selected_user.split("(")[0]
             user_data = df_students[df_students['이름'] == name_only].iloc[0]
             
-            # 비밀번호 비교 (문자열로 변환하여 비교)
             if str(pw_input) == str(user_data['비밀번호']):
                 st.session_state.login_info = {
                     "name": name_only, 
@@ -66,13 +74,11 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # 사이드바 프로필 표시
+    # 사이드바 설정
     st.sidebar.title(f"👤 {user['name']}")
     if user['name'] == "선생님":
-        st.sidebar.write("관리자 계정")
         menu_list = ["메인 홈", "결석계 작성", "비밀번호 변경", "교사용 관리"]
     else:
-        st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
         menu_list = ["메인 홈", "결석계 작성", "비밀번호 변경"]
 
     menu = st.sidebar.radio("행정 메뉴", menu_list)
