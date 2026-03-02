@@ -49,7 +49,7 @@ except:
     pass
 
 # ==========================================
-# 2. 이미지 처리 및 안전한 복구 함수
+# 2. 이미지 처리 함수 (고화질 스캔 모드)
 # ==========================================
 def process_image_advanced(image_data, mode="evidence"):
     if image_data is None: return ["", "", ""] if mode == "evidence" else ""
@@ -61,10 +61,7 @@ def process_image_advanced(image_data, mode="evidence"):
             img.save(buf, format="PNG") 
             return base64.b64encode(buf.getvalue()).decode()
         else:
-            # 증빙서류 처리 전 포인터 초기화
-            if hasattr(image_data, 'seek'):
-                image_data.seek(0)
-            
+            if hasattr(image_data, 'seek'): image_data.seek(0)
             img = Image.open(image_data)
             img = ImageOps.exif_transpose(img) 
             img = ImageOps.grayscale(img)
@@ -90,29 +87,30 @@ def process_image_advanced(image_data, mode="evidence"):
             while len(chunks) < 3: chunks.append("")
             return chunks
     except Exception as e:
-        st.error(f"이미지 처리 오류: {e}")
         return ["", "", ""] if mode == "evidence" else ""
 
+# [에러 해결] 시트 수식 오류 방지 복구 함수
 def decode_image(chunks):
     if chunks is None: return None
-    if isinstance(chunks, str):
-        chunks = [chunks]
+    if isinstance(chunks, str): chunks = [chunks]
     
     try:
-        # 조각들을 합칠 때 NaN이나 None을 걸러냄
         valid_chunks = []
         for c in chunks:
-            if pd.notnull(c) and str(c).lower() != 'nan' and str(c).strip() != "":
-                valid_chunks.append(str(c))
+            s = str(c)
+            if pd.isnull(c) or s.lower() == 'nan': continue
+            # 구글 시트 강제 텍스트 표기(') 제거
+            if s.startswith("'"): s = s[1:]
+            valid_chunks.append(s)
         
         full_base64 = "".join(valid_chunks)
         if not full_base64: return None
         return io.BytesIO(base64.b64decode(full_base64))
-    except Exception as e:
+    except:
         return None
 
 # ==========================================
-# 3. PDF 생성 클래스 (멀티페이지 로직 강화)
+# 3. PDF 생성 클래스
 # ==========================================
 class SchoolPDF(FPDF):
     def __init__(self):
@@ -122,11 +120,8 @@ class SchoolPDF(FPDF):
             self.add_font('NanumB', '', bold_font_path)
 
     def generate_report(self, data, g_sig, s_sig, evidence_img=None):
-        # --- 1페이지: 신고서 ---
         self.add_page()
-        if os.path.exists(bg_image_path):
-            self.image(bg_image_path, x=0, y=0, w=210, h=297)
-
+        if os.path.exists(bg_image_path): self.image(bg_image_path, x=0, y=0, w=210, h=297)
         self.set_text_color(0, 0, 0); self.set_font('Nanum', '', 13)
         self.text(98, 55, FIXED_DEPT); self.text(140, 55, str(FIXED_GRADE))
         self.text(161, 55, str(FIXED_CLASS)); self.text(177, 55, str(data['num']))
@@ -137,21 +132,12 @@ class SchoolPDF(FPDF):
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
         self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
-        
         if g_sig: self.image(g_sig, x=174, y=111, w=18)
         if s_sig: self.image(s_sig, x=174, y=121, w=18)
 
-        # --- 2페이지: 증빙서류 (조건부 추가) ---
         if evidence_img is not None:
             self.add_page()
-            # 이미지가 데이터 끝까지 잘 전달되었는지 확인 후 렌더링
-            try:
-                self.image(evidence_img, x=5, y=5, w=200)
-            except Exception as e:
-                # 이미지 렌더링 실패 시 메시지만 남김
-                self.set_font('Nanum', '', 12)
-                self.text(10, 10, f"증빙서류 이미지를 불러오는 중 오류가 발생했습니다.")
-        
+            self.image(evidence_img, x=5, y=5, w=200)
         return bytes(self.output())
 
 # ==========================================
@@ -208,37 +194,34 @@ elif menu == "결석계 작성":
                         num_only = int(sel_student.split("(")[1].replace("번)", ""))
                         st.session_state.student_name = name_only
                         
-                        # 1. 이미지 인코딩
                         g_b64 = process_image_advanced(g_canvas.image_data, mode="signature")
                         s_b64 = process_image_advanced(s_canvas.image_data, mode="signature")
                         proof_chunks = process_image_advanced(proof_file, mode="evidence")
                         
-                        # 2. PDF 생성 (증빙서류 포함 여부 명시적 확인)
-                        evidence_io = decode_image(proof_chunks)
-                        rep_data = {"num": num_only, "name": name_only, "s_m": start_d.month, "s_d": start_d.day,
-                                    "e_m": end_d.month, "e_d": end_d.day, "days": calc_days, "g_name": g_name}
-                        
+                        # PDF 생성
                         st.session_state.pdf_data = SchoolPDF().generate_report(
-                            rep_data, decode_image(g_b64), decode_image(s_b64), evidence_io
+                            {"num": num_only, "name": name_only, "s_m": start_d.month, "s_d": start_d.day,
+                             "e_m": end_d.month, "e_d": end_d.day, "days": calc_days, "g_name": g_name},
+                            decode_image(g_b64), decode_image(s_b64), decode_image(proof_chunks)
                         )
 
-                        # 3. 구글 시트 저장
+                        # 구글 시트 저장 (수식 오류 방지를 위해 앞에 ' 추가)
                         sub_time = get_kst().strftime("%m-%d %H:%M")
                         per_str = f"{start_d.strftime('%m-%d')}~{end_d.strftime('%m-%d')}"
                         existing = conn.read(ttl=0)
                         new_row = pd.DataFrame([{
                             "결석기간": per_str, "일수": calc_days, "이름": name_only, "번호": num_only,
                             "보호자": g_name, "상세사유": reason_detail, "제출일시": sub_time,
-                            "학생서명": s_b64, "보호자서명": g_b64, 
-                            "증빙_1": proof_chunks[0], "증빙_2": proof_chunks[1], "증빙_3": proof_chunks[2]
+                            "학생서명": f"'{s_b64}", "보호자서명": f"'{g_b64}", 
+                            "증빙_1": f"'{proof_chunks[0]}", "증빙_2": f"'{proof_chunks[1]}", "증빙_3": f"'{proof_chunks[2]}"
                         }])
                         conn.update(data=pd.concat([existing, new_row], ignore_index=True))
                         
-                        send_discord_notification(f"🔔 [결석계 제출] {name_only}({num_only}번) / {per_str} ({calc_days}일)")
+                        send_discord_notification(f"🔔 [결석계 제출] {name_only}({num_only}번) / {per_str}")
                         st.session_state.submitted = True
                         st.rerun()
                     except Exception as e:
-                        st.error(f"처리 실패: {e}")
+                        st.error(f"저장 실패: {e}")
 
 elif menu == "교사용 관리":
     st.title("👨‍🏫 교사용 관리")
@@ -260,11 +243,10 @@ elif menu == "교사용 관리":
                                   "e_m": ed.month, "e_d": ed.day, "days": int(float(row['일수'])), "g_name": str(row['보호자'])}
                             
                             ev_chunks = [row.get('증빙_1', ""), row.get('증빙_2', ""), row.get('증빙_3', "")]
-                            evidence_io = decode_image(ev_chunks)
                             
                             admin_pdf = SchoolPDF().generate_report(r_d, decode_image(row.get('보호자서명', "")), 
                                                                     decode_image(row.get('학생서명', "")), 
-                                                                    evidence_io)
+                                                                    decode_image(ev_chunks))
                             
                             st.download_button(f"📥 {row['이름']} 통합 PDF 다운로드", data=admin_pdf, 
                                                file_name=f"{row['이름']}_결석계.pdf", key=f"dl_{i}", use_container_width=True)
