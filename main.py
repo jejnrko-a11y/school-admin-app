@@ -51,7 +51,7 @@ def login_page():
         selected_user = st.selectbox("본인의 이름을 선택하세요", student_options)
         pw_input = st.text_input("비밀번호", type="password")
 
-        if st.button("로그인", use_container_width=True):
+if st.button("로그인", use_container_width=True):
             name_only = selected_user.split("(")[0]
             user_data = df_students[df_students['이름'] == name_only].iloc[0]
             
