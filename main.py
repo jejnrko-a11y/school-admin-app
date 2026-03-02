@@ -8,39 +8,21 @@ from PIL import Image, ImageOps, ImageEnhance
 import io
 import os
 import base64
-import requests # 디스코드 알림 전송을 위해 필요
+import requests
 
-# ==========================================
-# 1. 초기 설정 및 한국 시간
-# ==========================================
+# 1. 초기 설정
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
 def get_kst():
-    # 서버 시간에 9시간을 더해 한국 시간 반환
     return datetime.utcnow() + timedelta(hours=9)
 
-# [디스코드 알림 함수]
 def send_discord_notification(message):
     try:
-        # 1. Secrets 설정 확인
-        if "discord" not in st.secrets:
-            st.error("❌ Streamlit Secrets에 [discord] 설정이 없습니다!")
-            return
-
-        webhook_url = st.secrets["discord"]["webhook_url"]
-        data = {"content": message}
-        
-        # 2. 전송 및 응답 확인
-        response = requests.post(webhook_url, json=data)
-        
-        if response.status_code == 204:
-            st.toast("✅ 디스코드 알림 전송 성공!")
-        else:
-            st.error(f"❌ 디스코드 서버 응답 에러: {response.status_code}")
-            st.info(f"서버 메시지: {response.text}")
-            
-    except Exception as e:
-        st.error(f"⚠️ 알림 전송 중 시스템 오류 발생: {e}")
+        if "discord" in st.secrets:
+            webhook_url = st.secrets["discord"]["webhook_url"]
+            requests.post(webhook_url, json={"content": message})
+    except:
+        pass
 
 ADMIN_PASSWORD = "1234" 
 FIXED_DEPT = "컴퓨터전자과"
@@ -63,7 +45,6 @@ try:
 except:
     pass
 
-# --- 이미지 처리 및 PDF 클래스는 기존과 동일 (생략 없이 포함) ---
 def process_image(image_data, mode="evidence"):
     if image_data is None: return ""
     try:
@@ -78,13 +59,12 @@ def process_image(image_data, mode="evidence"):
             img = ImageOps.exif_transpose(img)
             img = ImageOps.grayscale(img)
             img = ImageEnhance.Contrast(img).enhance(2.0)
-            img = ImageEnhance.Sharpness(img).enhance(1.5)
-            max_chars, quality, size = 49500, 70, 1200
+            max_chars, quality, size = 49500, 70, 1100
             while True:
                 temp_img = img.copy()
-                temp_img.thumbnail((size, size), Image.LANCZOS)
+                temp_img.thumbnail((size, size))
                 buf = io.BytesIO()
-                temp_img.save(buf, format="JPEG", quality=quality, optimize=True)
+                temp_img.save(buf, format="JPEG", quality=quality)
                 encoded = base64.b64encode(buf.getvalue()).decode()
                 if len(encoded) < max_chars: return encoded
                 if quality > 30: quality -= 10
@@ -123,9 +103,7 @@ class SchoolPDF(FPDF):
             self.image(evidence_img, x=5, y=5, w=200)
         return bytes(self.output())
 
-# ==========================================
-# 3. 앱 UI 및 메인 로직
-# ==========================================
+# 2. UI 및 메뉴
 st.sidebar.title("🏫 행정 메뉴")
 menu = st.sidebar.radio("이동", ["메인 화면", "결석계 작성", "교사용 관리"])
 
@@ -137,6 +115,7 @@ if menu == "메인 화면":
     st.session_state.submitted = False
     st.title("🏫 경기기계공고 행정 시스템")
     st.write(f"현재 한국 시간: {get_kst().strftime('%m-%d %H:%M')}")
+    st.info("왼쪽 메뉴에서 '결석계 작성'을 선택하세요.")
 
 elif menu == "결석계 작성":
     if st.session_state.submitted:
@@ -150,14 +129,13 @@ elif menu == "결석계 작성":
     else:
         st.title("📝 결석신고서 작성")
         c1, c2 = st.columns(2)
-        start_d = c1.date_input("시작일", get_kst())
-        end_d = c2.date_input("종료일", get_kst())
+        start_d = c1.date_input("시작일")
+        end_d = c2.date_input("종료일")
         calc_days = len(pd.bdate_range(start_d, end_d)) if start_d <= end_d else 0
         st.info(f"평일 결석 일수: **{calc_days}일**")
 
         with st.form("absence_form"):
             sel_student = st.selectbox("학생 이름 선택", STUDENT_OPTIONS)
-            reason_cat = st.radio("사유 구분", ["질병", "인정", "기타"], horizontal=True)
             reason_detail = st.text_area("상세 사유")
             proof_file = st.file_uploader("증빙서류 사진 첨부", type=['jpg', 'png', 'jpeg'])
             g_name = st.text_input("보호자 성함")
@@ -176,34 +154,27 @@ elif menu == "결석계 작성":
                     name_only = sel_student.split("(")[0]
                     num_only = int(sel_student.split("(")[1].replace("번)", ""))
                     st.session_state.student_name = name_only
-                    
                     g_b64 = process_image(g_canvas.image_data, mode="signature")
                     s_b64 = process_image(s_canvas.image_data, mode="signature")
                     proof_b64 = process_image(proof_file, mode="evidence")
-
                     rep_data = {"num": num_only, "name": name_only, "s_m": start_d.month, "s_d": start_d.day,
                                 "e_m": end_d.month, "e_d": end_d.day, "days": calc_days, "g_name": g_name}
                     st.session_state.pdf_data = SchoolPDF().generate_report(rep_data, decode_image(g_b64), decode_image(s_b64), decode_image(proof_b64))
 
                     try:
-                        submission_time = get_kst().strftime("%m-%d %H:%M")
-                        period_str = f"{start_d.strftime('%m-%d')}~{end_d.strftime('%m-%d')}"
-                        
+                        sub_time = get_kst().strftime("%m-%d %H:%M")
+                        per_str = f"{start_d.strftime('%m-%d')}~{end_d.strftime('%m-%d')}"
                         existing = conn.read(ttl=0)
                         new_row = pd.DataFrame([{
-                            "결석기간": period_str, "일수": calc_days, "이름": name_only, "번호": num_only,
-                            "보호자": g_name, "상세사유": reason_detail, "제출일시": submission_time,
+                            "결석기간": per_str, "일수": calc_days, "이름": name_only, "번호": num_only,
+                            "보호자": g_name, "상세사유": reason_detail, "제출일시": sub_time,
                             "학생서명": s_b64, "보호자서명": g_b64, "증빙서류데이터": proof_b64
                         }])
                         conn.update(data=pd.concat([existing, new_row], ignore_index=True))
-                        
-                        # [알림 전송] 제출 완료 시 디스코드로 알림 쏘기
-                        notif_text = f"🔔 **[결석계 제출]** {name_only}({num_only}번) 학생\n📅 기간: {period_str} ({calc_days}일간)\n❓ 사유: {reason_cat}\n📝 시간: {submission_time}"
-                        send_notification = send_discord_notification(notif_text)
-
+                        send_discord_notification(f"🔔 [결석계 제출] {name_only}({num_only}번) 학생 / {per_str} ({calc_days}일)")
                         st.session_state.submitted = True
                         st.rerun()
-                    except Exception as e: st.error(f"저장 실패: {e}")
+                    except: st.error("저장 실패")
 
 elif menu == "교사용 관리":
     st.title("👨‍🏫 교사용 관리")
@@ -216,19 +187,15 @@ elif menu == "교사용 관리":
                 for i, row in data.iterrows():
                     with st.expander(f"📌 {row['제출일시']} - {row['이름']} 학생"):
                         try:
-                            current_year = get_kst().year
-                            sd_part = row['결석기간'].split('~')[0]
-                            ed_part = row['결석기간'].split('~')[1] if '~' in row['결석기간'] else sd_part
-                            sd = datetime.strptime(f"{current_year}-{sd_part}", "%Y-%m-%d")
-                            ed = datetime.strptime(f"{current_year}-{ed_part}", "%Y-%m-%d")
-                            r_data = {"num": int(float(row['번호'])), "name": str(row['이름']), 
-                                      "s_m": sd.month, "s_d": sd.day, "e_m": ed.month, "e_d": ed.day,
-                                      "days": int(float(row['일수'])), "g_name": str(row['보호자'])}
-                            admin_pdf = SchoolPDF().generate_report(r_data, decode_image(row.get('보호자서명')), 
-                                                                    decode_image(row.get('학생서명')), 
-                                                                    decode_image(row.get('증빙서류데이터')))
-                            st.download_button(f"📥 {row['이름']} 통합 PDF 다운로드", data=admin_pdf, 
-                                               file_name=f"{row['이름']}_결석계.pdf", key=f"dl_{i}", use_container_width=True)
+                            cy = get_kst().year
+                            sd_p = row['결석기간'].split('~')[0]
+                            ed_p = row['결석기간'].split('~')[1] if '~' in row['결석기간'] else sd_p
+                            sd = datetime.strptime(f"{cy}-{sd_p}", "%Y-%m-%d")
+                            ed = datetime.strptime(f"{cy}-{ed_p}", "%Y-%m-%d")
+                            r_d = {"num": int(float(row['번호'])), "name": str(row['이름']), "s_m": sd.month, "s_d": sd.day,
+                                  "e_m": ed.month, "e_d": ed.day, "days": int(float(row['일수'])), "g_name": str(row['보호자'])}
+                            adm_pdf = SchoolPDF().generate_report(r_d, decode_image(row.get('보호자서명')), decode_image(row.get('학생서명')), decode_image(row.get('증빙서류데이터')))
+                            st.download_button(f"📥 {row['이름']} 통합 PDF 다운로드", data=adm_pdf, file_name=f"{row['이름']}_결석계.pdf", key=f"dl_{i}", use_container_width=True)
                         except: st.error("PDF 변환 오류")
             else: st.info("데이터 없음")
         except: st.error("시트 로드 실패")
