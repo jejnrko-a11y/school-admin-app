@@ -27,10 +27,11 @@ def show_page(conn, password, fixed_info, paths):
                             # 증빙 조각 리스트 구성
                             ev_chunks = [row.get(f'증빙_{k}', "") for k in range(1, 11)]
                             
-                            admin_pdf = SchoolPDF(paths['font'], paths['bold_font'], paths['bg']).generate_report(
+                            # [수정] 서명은 decode_image_safe, 증빙은 decode_multiple_images_safe
+                            pdf_bytes = SchoolPDF(paths['font'], paths['bold_font'], paths['bg']).generate_report(
                                 r_d, 
-                                decode_multiple_images_safe(row.get('보호자서명', "")), 
-                                decode_multiple_images_safe(row.get('학생서명', "")), 
+                                decode_image_safe(row.get('보호자서명', "")), 
+                                decode_image_safe(row.get('학생서명', "")), 
                                 decode_multiple_images_safe(ev_chunks),
                                 fixed_info
                             )
