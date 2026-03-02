@@ -18,37 +18,69 @@ def send_discord_notification(message):
             requests.post(webhook_url, json={"content": message})
     except: pass
 
+# [수정] 이미지 처리 로직 강화
 def process_multiple_images(uploaded_files):
-    if not uploaded_files: return [""] * 10
+    if not uploaded_files:
+        return [""] * 10
+    
     all_encoded = []
     try:
         for file in uploaded_files:
+            # 1. 파일 포인터 초기화 (가장 빈번한 에러 원인 해결)
             file.seek(0)
-            img = Image.open(file)
-            img = ImageOps.exif_transpose(img) 
-            img = img.convert('L')
-            # 스캔 보정
-            bg = img.filter(ImageFilter.GaussianBlur(radius=50))
-            img = ImageChops.divide(img, bg)
-            img = ImageOps.autocontrast(img, cutoff=1)
-            img = ImageEnhance.Contrast(img).enhance(1.8)
-            img.thumbnail((1000, 1000), Image.LANCZOS)
             
+            # 2. 이미지 열기 및 검증
+            try:
+                img = Image.open(file)
+            except Exception as e:
+                st.error(f"이미지 파일을 열 수 없습니다: {file.name}. 에러: {e}")
+                continue
+
+            # 3. 사진 방향 및 모드 보정
+            img = ImageOps.exif_transpose(img) 
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            img = img.convert('L') # 흑백 변환
+            
+            # 4. 그림자 제거 및 보정 (안전하게 처리)
+            try:
+                bg = img.filter(ImageFilter.GaussianBlur(radius=50))
+                img = ImageChops.divide(img, bg)
+                img = ImageOps.autocontrast(img, cutoff=1)
+                img = ImageEnhance.Contrast(img).enhance(1.8)
+            except:
+                pass # 보정 실패 시 원본 흑백 사용
+            
+            # 5. 해상도 조절 (용량 최적화)
+            img.thumbnail((1000, 1000), Image.Resampling.LANCZOS)
+            
+            # 6. 인코딩
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=50, optimize=True)
-            all_encoded.append(base64.b64encode(buf.getvalue()).decode())
+            encoded_str = base64.b64encode(buf.getvalue()).decode()
+            
+            if encoded_str:
+                all_encoded.append(encoded_str)
         
+        if not all_encoded:
+            return [""] * 10
+            
+        # 7. 조각 분할
         full_string = "|".join(all_encoded)
         chunk_size = 45000
         chunks = [full_string[i:i + chunk_size] for i in range(0, len(full_string), chunk_size)]
+        
         while len(chunks) < 10: chunks.append("")
         return chunks[:10]
+
     except Exception as e:
-        st.error(f"이미지 변환 실패: {e}")
+        st.error(f"이미지 변환 시스템 오류: {e}")
         return [""] * 10
 
 def decode_image_safe(b64_str):
-    if not b64_str or str(b64_str).lower() == 'nan': return None
+    if not b64_str or str(b64_str).lower() == 'nan' or str(b64_str).strip() == "":
+        return None
     try:
         s = str(b64_str).strip()
         while s.startswith("'"): s = s[1:]
@@ -101,6 +133,7 @@ class SchoolPDF(FPDF):
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
         self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
+        
         if g_sig_io: g_sig_io.seek(0); self.image(g_sig_io, x=174, y=111, w=18)
         if s_sig_io: s_sig_io.seek(0); self.image(s_sig_io, x=174, y=121, w=18)
         if evidence_io_list:
