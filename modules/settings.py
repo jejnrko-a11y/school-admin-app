@@ -14,21 +14,33 @@ def show_page(conn, user):
         
         if submit:
             try:
-                # 최신 명부 데이터 로드
+                # 1. 최신 명부 데이터 로드
                 df = conn.read(worksheet="학생명부", ttl=0)
                 user_idx = df[df['이름'] == user['name']].index[0]
-                db_pw = str(df.loc[user_idx, '비밀번호'])
                 
-                if str(curr_pw) != db_pw:
-                    st.error("현재 비밀번호가 일치하지 않습니다.")
+                # 2. 시트 내 비밀번호 형식 보정 (0 -> 0000)
+                db_pw_raw = str(df.loc[user_idx, '비밀번호']).strip().split('.')[0]
+                if db_pw_raw.isdigit() and len(db_pw_raw) < 4:
+                    db_pw = db_pw_raw.zfill(4)
+                else:
+                    db_pw = db_pw_raw
+                
+                # 3. 일치 여부 검증
+                if str(curr_pw).strip() != db_pw:
+                    st.error(f"현재 비밀번호가 일치하지 않습니다.")
                 elif new_pw != conf_pw:
                     st.error("새 비밀번호가 서로 일치하지 않습니다.")
                 elif len(new_pw) < 4:
                     st.error("비밀번호는 최소 4자리 이상이어야 합니다.")
                 else:
-                    # 구글 시트에 업데이트
+                    # 4. 구글 시트에 업데이트
                     df.loc[user_idx, '비밀번호'] = str(new_pw)
                     conn.update(worksheet="학생명부", data=df)
-                    st.success("✅ 비밀번호가 변경되었습니다! 다음 로그인부터 적용됩니다.")
+                    
+                    # 5. [중요] 비밀번호가 바뀌었으므로 메인 페이지의 캐시를 삭제
+                    st.cache_data.clear()
+                    
+                    st.success("✅ 비밀번호가 성공적으로 변경되었습니다! 다음 로그인부터 적용됩니다.")
+                    st.balloons()
             except Exception as e:
                 st.error(f"변경 중 오류가 발생했습니다: {e}")
