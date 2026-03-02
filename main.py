@@ -4,7 +4,9 @@ from modules import absence, teacher_admin, settings
 from utils import get_kst
 import pandas as pd
 
-# --- 앱 기본 설정 ---
+# ==========================================
+# 1. 앱 기본 설정 및 고정 데이터
+# ==========================================
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
 ADMIN_PASSWORD = "1234" 
@@ -21,60 +23,68 @@ try:
 except:
     pass
 
-# --- [수정] 학생 명부를 캐시를 써서 안전하게 가져오는 함수 ---
-@st.cache_data(ttl=600) # 10분 동안 구글 시트에 재요청하지 않음
-def get_cached_student_list():
-    return conn.read(worksheet="학생명부")
+# ==========================================
+# 2. 데이터 처리 함수 (캐시 적용 및 형식 보정)
+# ==========================================
 
-# --- 로그인 페이지 함수 ---
+@st.cache_data(ttl=600) # 10분 동안 명단을 구글 시트에 재요청하지 않음 (Quota 에러 방지)
+def get_cached_student_list():
+    try:
+        return conn.read(worksheet="학생명부")
+    except Exception as e:
+        st.error(f"명단을 가져오는 중 오류 발생: {e}")
+        return pd.DataFrame()
+
+# ==========================================
+# 3. 로그인 페이지 함수
+# ==========================================
 def login_page():
     st.title("🏫 경기기계공고 학생 인증")
-    try:
-        # 캐시된 데이터 읽기
-        df_students = get_cached_student_list()
-        
-        student_options = []
-        for _, row in df_students.iterrows():
-            if pd.isna(row['번호']):
-                student_options.append(row['이름'])
-            else:
-                student_options.append(f"{row['이름']}({int(row['번호'])}번)")
-    except Exception as e:
-        # 에러가 Quota 문제일 경우 안내 메시지 출력
-        if "429" in str(e):
-            st.error("⚠️ 접속자가 많아 잠시 서비스가 지연되고 있습니다. 1분 후 새로고침(F5) 해주세요.")
-        else:
-            st.error(f"학생 명부를 불러올 수 없습니다: {e}")
+    
+    df_students = get_cached_student_list()
+    
+    if df_students.empty:
+        st.warning("학생 명부 데이터가 비어있습니다. 구글 시트를 확인하세요.")
         return
+
+    # 이름(번호번) 형식으로 옵션 생성
+    student_options = []
+    for _, row in df_students.iterrows():
+        name = str(row['이름'])
+        # 번호가 소수점(0.0)으로 표시되는 것 방지
+        num_val = str(row['번호']).replace('.0', '')
+        if num_val == 'nan' or name == '선생님':
+            student_options.append(name)
+        else:
+            student_options.append(f"{name}({num_val}번)")
 
     with st.container(border=True):
         selected_user = st.selectbox("본인의 이름을 선택하세요", student_options)
         pw_input = st.text_input("비밀번호", type="password")
-
-if st.button("로그인", use_container_width=True):
+        
+        if st.button("로그인", use_container_width=True):
             name_only = selected_user.split("(")[0]
             user_data = df_students[df_students['이름'] == name_only].iloc[0]
             
-            # [수정된 로직] 비밀번호 비교를 매우 정밀하게 수행
-            # 1. 시트 데이터를 문자열로 변환
-            db_pw = str(user_data['비밀번호']).strip()
-            # 2. 혹시 소수점(0.0)이 붙었다면 제거
-            if db_pw.endswith('.0'):
-                db_pw = db_pw[:-2]
-            # 3. 입력값도 문자열로 변환
+            # [핵심] 비밀번호 형식 불일치 해결 로직
+            db_pw = str(user_data['비밀번호']).strip().replace('.0', '')
             input_pw = str(pw_input).strip()
             
             if input_pw == db_pw:
+                # 로그인 정보 세션 저장
+                num_raw = str(user_data['번호']).replace('.0', '')
                 st.session_state.login_info = {
                     "name": name_only, 
-                    "num": 0 if pd.isna(user_data['번호']) else int(user_data['번호'])
+                    "num": 0 if num_raw == 'nan' else int(float(num_raw))
                 }
                 st.success(f"🔓 {name_only}님, 인증 성공!")
                 st.rerun()
             else:
-                st.error(f"비밀번호가 틀렸습니다. (입력: {input_pw}, 실제: {db_pw})") # 확인을 위해 실제값 잠시 노출
-                
-# --- 메인 로직 시작 ---
+                st.error("비밀번호가 틀렸습니다.")
+
+# ==========================================
+# 4. 메인 컨트롤 로직
+# ==========================================
 if 'login_info' not in st.session_state:
     st.session_state.login_info = None
 
@@ -85,22 +95,34 @@ else:
     
     # 사이드바 설정
     st.sidebar.title(f"👤 {user['name']}")
+    
+    # 사용자 권한에 따른 메뉴 분기
     if user['name'] == "선생님":
+        st.sidebar.info("관리자 계정으로 접속 중")
         menu_list = ["메인 홈", "결석계 작성", "비밀번호 변경", "교사용 관리"]
     else:
+        st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
         menu_list = ["메인 홈", "결석계 작성", "비밀번호 변경"]
 
     menu = st.sidebar.radio("행정 메뉴", menu_list)
     
+    st.sidebar.markdown("---")
     if st.sidebar.button("로그아웃"):
         st.session_state.login_info = None
         st.session_state.submitted = False
         st.rerun()
 
+    # --- 페이지 연결 ---
     if menu == "메인 홈":
-        st.title(f"👋 {user['name']}님, 반갑습니다!")
+        st.title(f"👋 {user['name']}님, 환영합니다!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%Y-%m-%d %H:%M')}")
-        st.info("왼쪽 메뉴를 선택하여 행정 업무를 시작하세요.")
+        st.info("왼쪽 메뉴를 선택하여 행정 업무를 진행하세요.")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            st.info("📝 **결석계 작성**\n\n증빙서류 사진을 여러 장 첨부하여 제출할 수 있습니다.")
+        with c2:
+            st.info("⚙️ **비밀번호 변경**\n\n본인만의 비밀번호로 변경하여 보안을 강화하세요.")
 
     elif menu == "결석계 작성":
         absence.show_page(conn, user, FIXED_INFO, PATHS)
