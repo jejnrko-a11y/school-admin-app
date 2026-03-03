@@ -1,6 +1,6 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
-from modules import absence, teacher_admin, settings, timetable, attendance
+from modules import absence, teacher_admin, settings, timetable, attendance, seat
 from utils import get_kst
 import pandas as pd
 
@@ -172,6 +172,9 @@ else:
     elif st.session_state.page == "비밀번호 변경":
         settings.show_page(conn, user)
         
+    elif st.session_state.page == "교사용 결석계 확인":
+        teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
+        
     elif st.session_state.page == "자리배치":
-        st.title("🪑 자리배치 확인")
-        st.warning("준비 중입니다.")
+        # 수정됨: seat 모듈의 show_page 호출
+        seat.show_page(conn, user)
