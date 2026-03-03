@@ -69,47 +69,54 @@ def login_page():
             else:
                 st.error("비밀번호가 틀렸습니다.")
 
-# --- 세션 관리 및 로그인 로직 ---
+# --- 로그인 체크 및 페이지 라우팅 ---
+
 if 'login_info' not in st.session_state:
     st.session_state.login_info = None
 
+# 1. 로그인 전이면 로그인 페이지만 보여줌
 if st.session_state.login_info is None:
     login_page()
+
+# 2. 로그인 성공 시에만 아래 코드들이 실행됨
 else:
-    # 로그인 성공 시 실행되는 블록 (들여쓰기 주의)
     user = st.session_state.login_info
     st.sidebar.title(f"👤 {user['name']}님")
     
-    # 1. 권한별 메뉴 구성
-if user['name'] == "교사":
-    # 메뉴명을 직관적으로 '출결/서류 관리'로 변경
-    menu_list = ["메인 홈", "출결/서류 관리", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
-else:
-    # 학생 메뉴
-    menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
+    # [주의] 이 아래 모든 코드는 반드시 한 칸(4칸) 들여쓰기가 되어 있어야 합니다.
+    if user['name'] == "교사":
+        menu_list = ["메인 홈", "출결/서류 관리", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
+    else:
+        st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
+        menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
 
-    # 2. 사이드바 메뉴 선택
     menu = st.sidebar.radio("행정 메뉴", menu_list)
     
     if st.sidebar.button("로그아웃"):
         st.session_state.clear()
         st.rerun()
 
-    # 3. 메뉴별 페이지 라우팅
+    # 페이지 내용 출력 부분
     if menu == "메인 홈":
         st.title(f"👋 {user['name']}님, 환영합니다!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%Y-%m-%d %H:%M')}")
         st.info("왼쪽 메뉴를 선택하여 행정 업무를 진행하세요.")
-    elif menu == "출결/서류 관리":  # 추가된 부분
+    
+    elif menu == "출결/서류 관리":
         attendance.show_page(conn)
+        
     elif menu == "결석계 작성":
         absence.show_page(conn, user, FIXED_INFO, PATHS)
+        
     elif menu == "시간표 확인":
         timetable.show_page(conn)
+        
     elif menu == "비밀번호 변경":
         settings.show_page(conn, user)
+        
     elif menu == "교사용 관리":
         teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
+        
     elif menu == "자리배치":
         st.title("🪑 자리배치 확인")
         st.warning("준비 중입니다.")
