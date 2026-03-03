@@ -85,26 +85,26 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # [메뉴 설정] 오타 수정: "교사용 출결/서류 관리"
-    menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
+    # [요구사항] 메뉴 구성 변경
+    menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
     if user['name'] == "교사":
-        menu_list += ["교사용 출결/서류 관리", "교사용 관리"]
+        menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
 
-    # 현재 세션 페이지가 메뉴 리스트에 있는지 확인 후 인덱스 설정
+    # 현재 세션 페이지 인덱스 동기화
     try:
         current_idx = menu_list.index(st.session_state.page)
     except ValueError:
         current_idx = 0
         st.session_state.page = "메인 홈"
 
-    # 사이드바
+    # 사이드바 (행정 메뉴 -> 메뉴)
     st.sidebar.title(f"👤 {user['name']}님")
     if user['name'] != "교사":
         st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
     
-    selected_menu = st.sidebar.radio("행정 메뉴", menu_list, index=current_idx)
+    selected_menu = st.sidebar.radio("메뉴", menu_list, index=current_idx)
     
-    # 사이드바에서 메뉴 클릭 시 상태 동기화
+    # 사이드바 선택 시 상태 업데이트
     if selected_menu != st.session_state.page:
         st.session_state.page = selected_menu
         st.rerun()
@@ -120,7 +120,7 @@ else:
             st.rerun()
         st.divider()
 
-    # [페이지별 화면 출력]
+    # [페이지별 화면 출력 및 라우팅]
     if st.session_state.page == "메인 홈":
         st.title(f"👋 {user['name']}님!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%H:%M')}")
@@ -135,42 +135,42 @@ else:
                 st.session_state.page = "자리배치"
                 st.rerun()
         with col2:
-            if st.button("📅\n\n시간표 확인", use_container_width=True):
-                st.session_state.page = "시간표 확인"
+            if st.button("📅\n\n시간표", use_container_width=True):
+                st.session_state.page = "시간표"
                 st.rerun()
-            if st.button("🔐\n\n비번 변경", use_container_width=True):
+            if st.button("🔐\n\n비밀번호 변경", use_container_width=True):
                 st.session_state.page = "비밀번호 변경"
                 st.rerun()
         
-        # 교사용 추가 버튼
+        # 교사용 추가 버튼 (홈 화면 아이콘 매칭)
         if user['name'] == "교사":
             st.markdown("---")
             st.markdown("### 👨‍🏫 교사용 행정")
             tc1, tc2 = st.columns(2)
             with tc1:
-                if st.button("🚩\n\n출결/서류 관리", use_container_width=True):
-                    st.session_state.page = "교사용 출결/서류 관리"
+                if st.button("🚩\n\n출석체크", use_container_width=True):
+                    st.session_state.page = "교사용 출석체크"
                     st.rerun()
             with tc2:
-                if st.button("📁\n\n교사용 관리", use_container_width=True):
-                    st.session_state.page = "교사용 관리"
+                if st.button("📁\n\n결석계 확인", use_container_width=True):
+                    st.session_state.page = "교사용 결석계 확인"
                     st.rerun()
 
-    # 라우팅 블록 (이름 일치 확인)
-    elif st.session_state.page == "교사용 출결/서류 관리":
+    # --- 라우팅 분기점 (수정된 이름 기반) ---
+    elif st.session_state.page == "교사용 출석체크":
         attendance.show_page(conn)
+        
+    elif st.session_state.page == "교사용 결석계 확인":
+        teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
         
     elif st.session_state.page == "결석계 작성":
         absence.show_page(conn, user, FIXED_INFO, PATHS)
         
-    elif st.session_state.page == "시간표 확인":
+    elif st.session_state.page == "시간표":
         timetable.show_page(conn)
         
     elif st.session_state.page == "비밀번호 변경":
         settings.show_page(conn, user)
-        
-    elif st.session_state.page == "교사용 관리":
-        teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
         
     elif st.session_state.page == "자리배치":
         st.title("🪑 자리배치 확인")
