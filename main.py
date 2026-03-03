@@ -1,6 +1,19 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
-from modules import absence, teacher_admin, settings, timetable, attendance, seating # 모듈 추가
+
+# 에러 추적을 위해 임포트 방식을 한 줄씩 나눕니다.
+try:
+    from modules import absence
+    from modules import teacher_admin
+    from modules import settings
+    from modules import timetable
+    from modules import attendance
+    from modules import seating
+except ImportError as e:
+    st.error(f"모듈 불러오기 실패: {e}")
+    st.info("GitHub의 modules 폴더 안에 해당 파일이 있는지, 폴더명이 'modules'가 맞는지 확인하세요.")
+    st.stop()
+
 from utils import get_kst
 import pandas as pd
 
