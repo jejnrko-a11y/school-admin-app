@@ -1,21 +1,18 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
+import pandas as pd
 
-# 에러 추적을 위해 임포트 방식을 한 줄씩 나눕니다.
-try:
-    from modules import absence
-    from modules import teacher_admin
-    from modules import settings
-    from modules import timetable
-    from modules import attendance
-    from modules import seating
-except ImportError as e:
-    st.error(f"모듈 불러오기 실패: {e}")
-    st.info("GitHub의 modules 폴더 안에 해당 파일이 있는지, 폴더명이 'modules'가 맞는지 확인하세요.")
-    st.stop()
+# 모듈을 안전하게 하나씩 직접 불러옵니다.
+import modules.absence as absence
+import modules.teacher_admin as teacher_admin
+import modules.settings as settings
+import modules.timetable as timetable
+import modules.attendance as attendance
+import modules.seating as seating
 
 from utils import get_kst
-import pandas as pd
+
+# --- 이하 코드(FIXED_INFO 등)는 동일 ---
 
 # --- 앱 기본 설정 ---
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
