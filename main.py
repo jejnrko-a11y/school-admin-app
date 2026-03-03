@@ -1,12 +1,11 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
-from modules import absence, teacher_admin, settings, timetable
+from modules import absence, teacher_admin, settings, timetable, attendance # import 정리
 from utils import get_kst
 import pandas as pd
-from modules import absence, teacher_admin, settings, timetable, attendance
 
 # ==========================================
-# 1. 초기 설정 (보안을 위해 코드 내 명단 삭제)
+# 1. 초기 설정
 # ==========================================
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
@@ -20,10 +19,11 @@ PATHS = {
 }
 
 # 서비스 연결
+conn = None
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
-except:
-    pass
+except Exception as e:
+    st.error(f"데이터베이스 연결 오류: {e}")
 
 @st.cache_data(ttl=60)
 def get_cached_student_list():
@@ -69,32 +69,37 @@ def login_page():
             else:
                 st.error("비밀번호가 틀렸습니다.")
 
+# --- 세션 관리 및 로그인 로직 ---
 if 'login_info' not in st.session_state:
     st.session_state.login_info = None
 
 if st.session_state.login_info is None:
     login_page()
 else:
+    # 로그인 성공 시 실행되는 블록 (들여쓰기 주의)
     user = st.session_state.login_info
     st.sidebar.title(f"👤 {user['name']}님")
     
-if user['name'] == "교사":
-    # '일일 출결 체크' 메뉴 추가
-    menu_list = ["메인 홈", "일일 출결 체크", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
-else:
-    st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
-    menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
+    # 1. 권한별 메뉴 구성
+    if user['name'] == "교사":
+        menu_list = ["메인 홈", "일일 출결 체크", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
+    else:
+        st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
+        menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
 
-menu = st.sidebar.radio("행정 메뉴", menu_list)
+    # 2. 사이드바 메뉴 선택
+    menu = st.sidebar.radio("행정 메뉴", menu_list)
+    
     if st.sidebar.button("로그아웃"):
         st.session_state.clear()
         st.rerun()
 
+    # 3. 메뉴별 페이지 라우팅
     if menu == "메인 홈":
         st.title(f"👋 {user['name']}님, 환영합니다!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%Y-%m-%d %H:%M')}")
         st.info("왼쪽 메뉴를 선택하여 행정 업무를 진행하세요.")
-    elif menu == "일일 출결 체크":  # 추가된 분기
+    elif menu == "일일 출결 체크":
         attendance.show_page(conn)        
     elif menu == "결석계 작성":
         absence.show_page(conn, user, FIXED_INFO, PATHS)
@@ -107,4 +112,3 @@ menu = st.sidebar.radio("행정 메뉴", menu_list)
     elif menu == "자리배치":
         st.title("🪑 자리배치 확인")
         st.warning("준비 중입니다.")
-        
