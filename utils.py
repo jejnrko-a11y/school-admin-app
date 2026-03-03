@@ -135,7 +135,7 @@ class SchoolPDF(FPDF):
         self.text(146, 77, str(data['s_m'])); self.text(163, 77, str(data['s_d']))
         self.text(28, 85, str(data['e_m'])); self.text(46, 85, str(data['e_d'])); self.text(73, 85, str(data['days']))
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
-        self.text(105.5, 250, str(data['s_m'])); self.text(118.5, 250, str(data['s_d']))
+        self.text(105.5, 249.5, str(data['s_m'])); self.text(118.5, 249.5, str(data['s_d']))
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
         
         # 서명 배치 (seek(0) 필수)
