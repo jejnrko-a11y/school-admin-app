@@ -3,6 +3,7 @@ from streamlit_gsheets import GSheetsConnection
 from modules import absence, teacher_admin, settings, timetable
 from utils import get_kst
 import pandas as pd
+from modules import absence, teacher_admin, settings, timetable, attendance
 
 # ==========================================
 # 1. 초기 설정 (보안을 위해 코드 내 명단 삭제)
@@ -77,13 +78,14 @@ else:
     user = st.session_state.login_info
     st.sidebar.title(f"👤 {user['name']}님")
     
-    if user['name'] == "교사":
-        menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
-    else:
-        st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
-        menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
+if user['name'] == "교사":
+    # '일일 출결 체크' 메뉴 추가
+    menu_list = ["메인 홈", "일일 출결 체크", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
+else:
+    st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
+    menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
 
-    menu = st.sidebar.radio("행정 메뉴", menu_list)
+menu = st.sidebar.radio("행정 메뉴", menu_list)
     if st.sidebar.button("로그아웃"):
         st.session_state.clear()
         st.rerun()
@@ -92,6 +94,8 @@ else:
         st.title(f"👋 {user['name']}님, 환영합니다!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%Y-%m-%d %H:%M')}")
         st.info("왼쪽 메뉴를 선택하여 행정 업무를 진행하세요.")
+    elif menu == "일일 출결 체크":  # 추가된 분기
+        attendance.show_page(conn)        
     elif menu == "결석계 작성":
         absence.show_page(conn, user, FIXED_INFO, PATHS)
     elif menu == "시간표 확인":
@@ -103,3 +107,4 @@ else:
     elif menu == "자리배치":
         st.title("🪑 자리배치 확인")
         st.warning("준비 중입니다.")
+        
