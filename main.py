@@ -27,7 +27,6 @@ except Exception as e:
 @st.cache_data(ttl=60)
 def get_cached_student_list():
     try:
-        # 구글 시트에서 실시간으로 명단을 읽어옴
         return conn.read(worksheet="학생명부")
     except:
         return pd.DataFrame()
@@ -59,7 +58,6 @@ def login_page():
             name_only = selected_user.split("(")[0]
             user_data = df_students[df_students['이름'] == name_only].iloc[0]
             
-            # 비밀번호 형식 보정 (0 -> 0000)
             db_pw_raw = str(user_data['비밀번호']).strip().split('.')[0]
             db_pw = db_pw_raw.zfill(4) if (db_pw_raw.isdigit() and len(db_pw_raw) < 4) else db_pw_raw
             
@@ -74,55 +72,97 @@ def login_page():
                 st.error("비밀번호가 틀렸습니다.")
 
 # ==========================================
-# 3. 메인 로직 (세션 상태에 따른 분기)
+# 3. 메인 로직 및 동적 라우팅
 # ==========================================
 if 'login_info' not in st.session_state:
     st.session_state.login_info = None
 
-# 로그인 전
+# 현재 메뉴 상태 관리 (홈 버튼 클릭 시 이동용)
+if 'menu_index' not in st.session_state:
+    st.session_state.menu_index = 0
+
 if st.session_state.login_info is None:
     login_page()
-
-# 로그인 후 (에러 방지를 위해 모든 메뉴 코드를 else 안에 배치)
 else:
     user = st.session_state.login_info
-    st.sidebar.title(f"👤 {user['name']}님")
     
     # [권한별 메뉴 설정]
     if user['name'] == "교사":
         menu_list = ["메인 홈", "출결/서류 관리", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
     else:
-        st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
         menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
 
-    menu = st.sidebar.radio("행정 메뉴", menu_list)
+    # 사이드바 구성
+    st.sidebar.title(f"👤 {user['name']}님")
+    if user['name'] != "교사":
+        st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
+    
+    # 사이드바 라디오 버튼과 session_state 연동
+    selected_menu = st.sidebar.radio(
+        "행정 메뉴", 
+        menu_list, 
+        key="nav_menu" # key를 지정하면 st.session_state.nav_menu로 접근 가능
+    )
     
     if st.sidebar.button("로그아웃"):
         st.session_state.clear()
         st.rerun()
 
-    # [메뉴별 페이지 라우팅]
-    if menu == "메인 홈":
-        st.title(f"👋 {user['name']}님, 환영합니다!")
-        st.write(f"현재 시간(KST): {get_kst().strftime('%Y-%m-%d %H:%M')}")
-        st.info("왼쪽 메뉴를 선택하여 행정 업무를 진행하세요.")
-    
-    elif menu == "출결/서류 관리":
-        # 교사용 스마트 서류 크로스체크 모듈 호출
+    # [페이지별 화면 출력]
+    if selected_menu == "메인 홈":
+        st.title(f"👋 {user['name']}님!")
+        st.write(f"오늘도 즐거운 학교생활 되세요! (KST: {get_kst().strftime('%H:%M')})")
+        
+        st.markdown("### 🚀 바로가기")
+        
+        # 모바일용 2열 버튼 그리드
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📝\n\n결석계 작성", use_container_width=True):
+                st.session_state.nav_menu = "결석계 작성"
+                st.rerun()
+            if st.button("🪑\n\n자리배치", use_container_width=True):
+                st.session_state.nav_menu = "자리배치"
+                st.rerun()
+        
+        with col2:
+            if st.button("📅\n\n시간표 확인", use_container_width=True):
+                st.session_state.nav_menu = "시간표 확인"
+                st.rerun()
+            if st.button("🔐\n\n비번 변경", use_container_width=True):
+                st.session_state.nav_menu = "비밀번호 변경"
+                st.rerun()
+        
+        # 교사 전용 추가 버튼
+        if user['name'] == "교사":
+            st.markdown("---")
+            st.markdown("### 👨‍🏫 교사용 행정")
+            tc1, tc2 = st.columns(2)
+            with tc1:
+                if st.button("🚩\n\n출결/서류 관리", use_container_width=True):
+                    st.session_state.nav_menu = "출결/서류 관리"
+                    st.rerun()
+            with tc2:
+                if st.button("📁\n\n교사용 관리", use_container_width=True):
+                    st.session_state.nav_menu = "교사용 관리"
+                    st.rerun()
+
+    elif selected_menu == "출결/서류 관리":
         attendance.show_page(conn)
         
-    elif menu == "결석계 작성":
+    elif selected_menu == "결석계 작성":
         absence.show_page(conn, user, FIXED_INFO, PATHS)
         
-    elif menu == "시간표 확인":
+    elif selected_menu == "시간표 확인":
         timetable.show_page(conn)
         
-    elif menu == "비밀번호 변경":
+    elif selected_menu == "비밀번호 변경":
         settings.show_page(conn, user)
         
-    elif menu == "교사용 관리":
+    elif selected_menu == "교사용 관리":
         teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
         
-    elif menu == "자리배치":
+    elif selected_menu == "자리배치":
         st.title("🪑 자리배치 확인")
         st.warning("준비 중입니다.")
