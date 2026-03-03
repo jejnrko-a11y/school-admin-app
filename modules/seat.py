@@ -33,16 +33,13 @@ def show_page(conn, user):
 
     # --- 2. 데이터 로드 ---
     try:
-        # 자리배치 데이터 (머릿글 포함)
         df_seat = conn.read(worksheet="자리배치", ttl=0)
-        
-        # 학생명부 데이터 (이름(번호번) 형식 리스트 생성)
         df_students = conn.read(worksheet="학생명부", ttl=0)
         df_students = df_students[df_students['이름'] != '교사'].copy()
         df_students['번호'] = pd.to_numeric(df_students['번호'], errors='coerce').fillna(0).astype(int)
         df_students = df_students.sort_values(by='번호')
         
-        # "강건영(1번)" 형식의 리스트 생성
+        # "이름(번호번)" 형식의 학생 리스트
         student_formatted = [f"{row['이름']}({row['번호']}번)" for _, row in df_students.iterrows()]
     except Exception as e:
         st.error(f"데이터 로드 오류: {e}")
@@ -52,31 +49,31 @@ def show_page(conn, user):
     if user['name'] == "교사":
         c1, c2 = st.columns(2)
         
-        # 고정된 X 자리 좌표 (0-indexed: 4행 5열 기준 마지막 열의 아래쪽 두 칸)
-        # 이미지 기준: E4(row 2, col 4), E5(row 3, col 4)
+        # 고정된 X 자리 좌표 (E4, E5 -> 4열의 2행과 3행)
         fixed_x_coords = [(2, 4), (3, 4)]
+
+        def get_new_layout(student_list):
+            """세션(분단) 우선으로 자리를 배치하는 헬퍼 함수"""
+            # 4행 5열 빈 그리드 생성
+            grid = [["" for _ in range(5)] for _ in range(4)]
+            s_idx = 0
+            
+            # [수정 포인트] 열(분단)을 먼저 순회하고, 그 안에서 행(자리)을 순회
+            for c in range(5): # 1분단부터 5분단까지
+                for r in range(4): # 위에서 아래로
+                    if (r, c) in fixed_x_coords:
+                        grid[r][c] = "X"
+                    elif s_idx < len(student_list):
+                        grid[r][c] = student_list[s_idx]
+                        s_idx += 1
+            return grid
 
         with c1:
             if st.button("🎲 랜덤 자리 바꾸기", use_container_width=True):
                 shuffled = student_formatted.copy()
                 random.shuffle(shuffled)
+                new_data = get_new_layout(shuffled)
                 
-                new_data = []
-                s_idx = 0
-                for r in range(4):
-                    row_content = []
-                    for c in range(5):
-                        if (r, c) in fixed_x_coords:
-                            row_content.append("X")
-                        else:
-                            if s_idx < len(shuffled):
-                                row_content.append(shuffled[s_idx])
-                                s_idx += 1
-                            else:
-                                row_content.append("")
-                    new_data.append(row_content)
-                
-                # 시트 업데이트 (머릿글 유지)
                 new_df = pd.DataFrame(new_data, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
                 conn.update(worksheet="자리배치", data=new_df)
                 st.rerun()
@@ -84,20 +81,7 @@ def show_page(conn, user):
         with c2:
             if st.button("🔢 번호순 초기화", use_container_width=True):
                 ordered = student_formatted.copy()
-                new_data = []
-                s_idx = 0
-                for r in range(4):
-                    row_content = []
-                    for c in range(5):
-                        if (r, c) in fixed_x_coords:
-                            row_content.append("X")
-                        else:
-                            if s_idx < len(ordered):
-                                row_content.append(ordered[s_idx])
-                                s_idx += 1
-                            else:
-                                row_content.append("")
-                    new_data.append(row_content)
+                new_data = get_new_layout(ordered)
                 
                 new_df = pd.DataFrame(new_data, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
                 conn.update(worksheet="자리배치", data=new_df)
@@ -108,11 +92,9 @@ def show_page(conn, user):
     st.markdown('<div class="blackboard">칠 판 (Front)</div>', unsafe_allow_html=True)
     st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
 
-    # 4행 5열 그리드 출력
     for r in range(4):
         cols = st.columns(5)
         for c in range(5):
-            # df_seat는 머릿글이 있으므로 iloc으로 데이터 접근
             val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
             
             with cols[c]:
@@ -123,4 +105,4 @@ def show_page(conn, user):
                 else:
                     st.markdown('<div class="seat-card" style="border:1px dashed #ccc;"></div>', unsafe_allow_html=True)
 
-    st.info("💡 오른쪽 아래 'X' 표시는 비어있는 고정석입니다.")
+    st.info("💡 1분단(왼쪽)부터 번호 순서대로 채워지도록 설정되었습니다.")
