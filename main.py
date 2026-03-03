@@ -85,25 +85,26 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # [요구사항 1] 메뉴 순서 재배치
+    # [메뉴 설정] 오타 수정: "교사용 출결/서류 관리"
     menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
     if user['name'] == "교사":
-        menu_list += ["교용 출결/서류 관리", "교사용 관리"]
+        menu_list += ["교사용 출결/서류 관리", "교사용 관리"]
 
-    # 현재 인덱스 찾기
+    # 현재 세션 페이지가 메뉴 리스트에 있는지 확인 후 인덱스 설정
     try:
         current_idx = menu_list.index(st.session_state.page)
     except ValueError:
         current_idx = 0
+        st.session_state.page = "메인 홈"
 
-    # 사이드바 설정
+    # 사이드바
     st.sidebar.title(f"👤 {user['name']}님")
     if user['name'] != "교사":
         st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
     
     selected_menu = st.sidebar.radio("행정 메뉴", menu_list, index=current_idx)
     
-    # 사이드바 조작 시 동기화
+    # 사이드바에서 메뉴 클릭 시 상태 동기화
     if selected_menu != st.session_state.page:
         st.session_state.page = selected_menu
         st.rerun()
@@ -112,7 +113,7 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    # [요구사항 2] 뒤로가기 버튼 추가 (메인 홈이 아닐 때만 표시)
+    # [뒤로가기 버튼]
     if st.session_state.page != "메인 홈":
         if st.button("🔙 메인 홈으로 돌아가기", use_container_width=True):
             st.session_state.page = "메인 홈"
@@ -141,6 +142,7 @@ else:
                 st.session_state.page = "비밀번호 변경"
                 st.rerun()
         
+        # 교사용 추가 버튼
         if user['name'] == "교사":
             st.markdown("---")
             st.markdown("### 👨‍🏫 교사용 행정")
@@ -154,6 +156,7 @@ else:
                     st.session_state.page = "교사용 관리"
                     st.rerun()
 
+    # 라우팅 블록 (이름 일치 확인)
     elif st.session_state.page == "교사용 출결/서류 관리":
         attendance.show_page(conn)
         
