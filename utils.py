@@ -130,13 +130,13 @@ class SchoolPDF(FPDF):
         # [추가] '결석' 글자에 동그라미 그리기
         self.set_draw_color(0, 0, 0) # 검은색 선
         self.set_line_width(0.5)
-        # x=108, y=82.5 지점에 가로 10mm, 세로 7mm 타원 그리기 (결석 글자 위치)
-        self.ellipse(106, 81.5, 11, 7, style='D')
+        # x=95, y=80 지점에 가로 10mm, 세로 7mm 타원 그리기 (결석 글자 위치)
+        self.ellipse(95, 80, 11, 7, style='D')
 
         # 날짜
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
         self.text(105.5, 249.5, str(data['s_m'])); self.text(118.5, 249.5, str(data['s_d']))
-        self.text(148, 114, data['g_name']); self.text(158, 126, data['name'])
+        self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
         
         # 서명
         if g_sig_io: g_sig_io.seek(0); self.image(g_sig_io, x=174, y=111, w=18)
