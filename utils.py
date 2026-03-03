@@ -133,9 +133,9 @@ class SchoolPDF(FPDF):
         
         self.set_font('Nanum', '', 12)
         self.text(146, 77, str(data['s_m'])); self.text(163, 77, str(data['s_d']))
-        self.text(28, 85, str(data['e_m'])); self.text(47, 85, str(data['e_d'])); self.text(74, 85, str(data['days']))
+        self.text(28, 85, str(data['e_m'])); self.text(46, 85, str(data['e_d'])); self.text(73, 85, str(data['days']))
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
-        self.text(105.5, 248, str(data['s_m'])); self.text(118.5, 248, str(data['s_d']))
+        self.text(105.5, 250, str(data['s_m'])); self.text(118.5, 250, str(data['s_d']))
         self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
         
         # 서명 배치 (seek(0) 필수)
@@ -143,7 +143,9 @@ class SchoolPDF(FPDF):
         if s_sig_io: s_sig_io.seek(0); self.image(s_sig_io, x=174, y=121, w=18)
         
         if is_admin:
-            self.set_font('Nanum', '', 14); self.text(160, 258, "교사")
+            self.set_font('Nanum', '', 14)
+            # [수정 완료] "교사" -> "오정은" / X좌표를 160에서 159로 살짝 조정 (세 글자라 왼쪽으로 이동)
+            self.text(159, 258, "오정은") 
 
         # 2페이지 이후: 증빙서류들
         if evidence_io_list:
