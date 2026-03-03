@@ -9,6 +9,7 @@ import pandas as pd
 # ==========================================
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
+# 중요 정보 로드
 ADMIN_PASSWORD = st.secrets["auth"]["admin_password"] 
 FIXED_INFO = st.secrets["school_info"]
 PATHS = {
@@ -17,6 +18,7 @@ PATHS = {
     "bg": "background.png"
 }
 
+# 서비스 연결
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
@@ -29,6 +31,9 @@ def get_cached_student_list():
     except:
         return pd.DataFrame()
 
+# ==========================================
+# 2. 로그인 페이지
+# ==========================================
 def login_page():
     st.title("🏫 경기기계공고 학생 인증")
     df_students = get_cached_student_list()
@@ -60,19 +65,18 @@ def login_page():
                     "name": name_only, 
                     "num": 0 if str(user_data['번호']) == 'nan' else int(float(str(user_data['번호'])))
                 }
-                st.session_state.page = "메인 홈" # 로그인 직후 페이지 초기화
+                st.session_state.page = "메인 홈"
                 st.success(f"🔓 {name_only}님 인증 성공!")
                 st.rerun()
             else:
                 st.error("비밀번호가 틀렸습니다.")
 
 # ==========================================
-# 3. 메인 로직 및 동적 라우팅 (에러 수정됨)
+# 3. 메인 로직 및 내비게이션
 # ==========================================
 if 'login_info' not in st.session_state:
     st.session_state.login_info = None
 
-# 현재 페이지 상태 초기화 (핵심: 별도 변수 관리)
 if 'page' not in st.session_state:
     st.session_state.page = "메인 홈"
 
@@ -81,31 +85,25 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # [권한별 메뉴 설정]
+    # [요구사항 1] 메뉴 순서 재배치
+    menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
     if user['name'] == "교사":
-        menu_list = ["메인 홈", "출결/서류 관리", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
-    else:
-        menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
+        menu_list += ["교용 출결/서류 관리", "교사용 관리"]
 
-    # 현재 세션 상태의 페이지가 메뉴 리스트 중 몇 번째인지 확인
+    # 현재 인덱스 찾기
     try:
         current_idx = menu_list.index(st.session_state.page)
     except ValueError:
         current_idx = 0
 
-    # 사이드바 구성
+    # 사이드바 설정
     st.sidebar.title(f"👤 {user['name']}님")
     if user['name'] != "교사":
         st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
     
-    # ⭐️ 에러 수정 포인트: key를 사용하지 않고 return값과 index를 사용
-    selected_menu = st.sidebar.radio(
-        "행정 메뉴", 
-        menu_list, 
-        index=current_idx
-    )
+    selected_menu = st.sidebar.radio("행정 메뉴", menu_list, index=current_idx)
     
-    # 사이드바에서 메뉴를 클릭했을 때 상태 동기화
+    # 사이드바 조작 시 동기화
     if selected_menu != st.session_state.page:
         st.session_state.page = selected_menu
         st.rerun()
@@ -114,22 +112,27 @@ else:
         st.session_state.clear()
         st.rerun()
 
+    # [요구사항 2] 뒤로가기 버튼 추가 (메인 홈이 아닐 때만 표시)
+    if st.session_state.page != "메인 홈":
+        if st.button("🔙 메인 홈으로 돌아가기", use_container_width=True):
+            st.session_state.page = "메인 홈"
+            st.rerun()
+        st.divider()
+
     # [페이지별 화면 출력]
     if st.session_state.page == "메인 홈":
         st.title(f"👋 {user['name']}님!")
-        st.write(f"오늘도 즐거운 학교생활 되세요! (KST: {get_kst().strftime('%H:%M')})")
+        st.write(f"현재 시간(KST): {get_kst().strftime('%H:%M')}")
         
         st.markdown("### 🚀 바로가기")
         col1, col2 = st.columns(2)
-        
         with col1:
             if st.button("📝\n\n결석계 작성", use_container_width=True):
-                st.session_state.page = "결석계 작성" # 상태 변경
+                st.session_state.page = "결석계 작성"
                 st.rerun()
             if st.button("🪑\n\n자리배치", use_container_width=True):
                 st.session_state.page = "자리배치"
                 st.rerun()
-        
         with col2:
             if st.button("📅\n\n시간표 확인", use_container_width=True):
                 st.session_state.page = "시간표 확인"
@@ -144,14 +147,14 @@ else:
             tc1, tc2 = st.columns(2)
             with tc1:
                 if st.button("🚩\n\n출결/서류 관리", use_container_width=True):
-                    st.session_state.page = "출결/서류 관리"
+                    st.session_state.page = "교사용 출결/서류 관리"
                     st.rerun()
             with tc2:
                 if st.button("📁\n\n교사용 관리", use_container_width=True):
                     st.session_state.page = "교사용 관리"
                     st.rerun()
 
-    elif st.session_state.page == "출결/서류 관리":
+    elif st.session_state.page == "교사용 출결/서류 관리":
         attendance.show_page(conn)
         
     elif st.session_state.page == "결석계 작성":
