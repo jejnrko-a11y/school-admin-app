@@ -9,7 +9,6 @@ import pandas as pd
 # ==========================================
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
-# 중요 정보를 Secrets에서 가져오기
 ADMIN_PASSWORD = st.secrets["auth"]["admin_password"] 
 FIXED_INFO = st.secrets["school_info"]
 PATHS = {
@@ -18,7 +17,6 @@ PATHS = {
     "bg": "background.png"
 }
 
-# 구글 시트 서비스 연결
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
@@ -31,9 +29,6 @@ def get_cached_student_list():
     except:
         return pd.DataFrame()
 
-# ==========================================
-# 2. 로그인 페이지 정의
-# ==========================================
 def login_page():
     st.title("🏫 경기기계공고 학생 인증")
     df_students = get_cached_student_list()
@@ -57,7 +52,6 @@ def login_page():
         if st.button("로그인", use_container_width=True):
             name_only = selected_user.split("(")[0]
             user_data = df_students[df_students['이름'] == name_only].iloc[0]
-            
             db_pw_raw = str(user_data['비밀번호']).strip().split('.')[0]
             db_pw = db_pw_raw.zfill(4) if (db_pw_raw.isdigit() and len(db_pw_raw) < 4) else db_pw_raw
             
@@ -66,20 +60,21 @@ def login_page():
                     "name": name_only, 
                     "num": 0 if str(user_data['번호']) == 'nan' else int(float(str(user_data['번호'])))
                 }
+                st.session_state.page = "메인 홈" # 로그인 직후 페이지 초기화
                 st.success(f"🔓 {name_only}님 인증 성공!")
                 st.rerun()
             else:
                 st.error("비밀번호가 틀렸습니다.")
 
 # ==========================================
-# 3. 메인 로직 및 동적 라우팅
+# 3. 메인 로직 및 동적 라우팅 (에러 수정됨)
 # ==========================================
 if 'login_info' not in st.session_state:
     st.session_state.login_info = None
 
-# 현재 메뉴 상태 관리 (홈 버튼 클릭 시 이동용)
-if 'menu_index' not in st.session_state:
-    st.session_state.menu_index = 0
+# 현재 페이지 상태 초기화 (핵심: 별도 변수 관리)
+if 'page' not in st.session_state:
+    st.session_state.page = "메인 홈"
 
 if st.session_state.login_info is None:
     login_page()
@@ -92,77 +87,85 @@ else:
     else:
         menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
 
+    # 현재 세션 상태의 페이지가 메뉴 리스트 중 몇 번째인지 확인
+    try:
+        current_idx = menu_list.index(st.session_state.page)
+    except ValueError:
+        current_idx = 0
+
     # 사이드바 구성
     st.sidebar.title(f"👤 {user['name']}님")
     if user['name'] != "교사":
         st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
     
-    # 사이드바 라디오 버튼과 session_state 연동
+    # ⭐️ 에러 수정 포인트: key를 사용하지 않고 return값과 index를 사용
     selected_menu = st.sidebar.radio(
         "행정 메뉴", 
         menu_list, 
-        key="nav_menu" # key를 지정하면 st.session_state.nav_menu로 접근 가능
+        index=current_idx
     )
+    
+    # 사이드바에서 메뉴를 클릭했을 때 상태 동기화
+    if selected_menu != st.session_state.page:
+        st.session_state.page = selected_menu
+        st.rerun()
     
     if st.sidebar.button("로그아웃"):
         st.session_state.clear()
         st.rerun()
 
     # [페이지별 화면 출력]
-    if selected_menu == "메인 홈":
+    if st.session_state.page == "메인 홈":
         st.title(f"👋 {user['name']}님!")
         st.write(f"오늘도 즐거운 학교생활 되세요! (KST: {get_kst().strftime('%H:%M')})")
         
         st.markdown("### 🚀 바로가기")
-        
-        # 모바일용 2열 버튼 그리드
         col1, col2 = st.columns(2)
         
         with col1:
             if st.button("📝\n\n결석계 작성", use_container_width=True):
-                st.session_state.nav_menu = "결석계 작성"
+                st.session_state.page = "결석계 작성" # 상태 변경
                 st.rerun()
             if st.button("🪑\n\n자리배치", use_container_width=True):
-                st.session_state.nav_menu = "자리배치"
+                st.session_state.page = "자리배치"
                 st.rerun()
         
         with col2:
             if st.button("📅\n\n시간표 확인", use_container_width=True):
-                st.session_state.nav_menu = "시간표 확인"
+                st.session_state.page = "시간표 확인"
                 st.rerun()
             if st.button("🔐\n\n비번 변경", use_container_width=True):
-                st.session_state.nav_menu = "비밀번호 변경"
+                st.session_state.page = "비밀번호 변경"
                 st.rerun()
         
-        # 교사 전용 추가 버튼
         if user['name'] == "교사":
             st.markdown("---")
             st.markdown("### 👨‍🏫 교사용 행정")
             tc1, tc2 = st.columns(2)
             with tc1:
                 if st.button("🚩\n\n출결/서류 관리", use_container_width=True):
-                    st.session_state.nav_menu = "출결/서류 관리"
+                    st.session_state.page = "출결/서류 관리"
                     st.rerun()
             with tc2:
                 if st.button("📁\n\n교사용 관리", use_container_width=True):
-                    st.session_state.nav_menu = "교사용 관리"
+                    st.session_state.page = "교사용 관리"
                     st.rerun()
 
-    elif selected_menu == "출결/서류 관리":
+    elif st.session_state.page == "출결/서류 관리":
         attendance.show_page(conn)
         
-    elif selected_menu == "결석계 작성":
+    elif st.session_state.page == "결석계 작성":
         absence.show_page(conn, user, FIXED_INFO, PATHS)
         
-    elif selected_menu == "시간표 확인":
+    elif st.session_state.page == "시간표 확인":
         timetable.show_page(conn)
         
-    elif selected_menu == "비밀번호 변경":
+    elif st.session_state.page == "비밀번호 변경":
         settings.show_page(conn, user)
         
-    elif selected_menu == "교사용 관리":
+    elif st.session_state.page == "교사용 관리":
         teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
         
-    elif selected_menu == "자리배치":
+    elif st.session_state.page == "자리배치":
         st.title("🪑 자리배치 확인")
         st.warning("준비 중입니다.")
