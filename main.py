@@ -77,13 +77,16 @@ else:
     user = st.session_state.login_info
     st.sidebar.title(f"👤 {user['name']}님")
     
+    # 교사 계정일 경우
     if user['name'] == "교사":
-        menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
+        st.sidebar.info("관리자 권한 접속")
+        # '출결 관리' 메뉴 추가
+        menu_list = ["메인 홈", "출결 관리", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
     else:
-        st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
         menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
 
     menu = st.sidebar.radio("행정 메뉴", menu_list)
+    
     if st.sidebar.button("로그아웃"):
         st.session_state.clear()
         st.rerun()
@@ -103,3 +106,7 @@ else:
     elif menu == "자리배치":
         st.title("🪑 자리배치 확인")
         st.warning("준비 중입니다.")
+    elif menu == "출결 관리":
+        from modules import attendance
+        # STUDENT_LIST를 전달하여 이름 버튼을 만듭니다.
+        attendance.show_page(conn, STUDENT_LIST)
