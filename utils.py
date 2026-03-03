@@ -136,7 +136,7 @@ class SchoolPDF(FPDF):
         # 날짜
         self.text(104.5, 105, str(data['s_m'])); self.text(117.8, 105, str(data['s_d']))
         self.text(105.5, 249.5, str(data['s_m'])); self.text(118.5, 249.5, str(data['s_d']))
-        self.text(158, 117, data['g_name']); self.text(158, 126, data['name'])
+        self.text(148, 114, data['g_name']); self.text(158, 126, data['name'])
         
         # 서명
         if g_sig_io: g_sig_io.seek(0); self.image(g_sig_io, x=174, y=111, w=18)
