@@ -5,11 +5,11 @@ from utils import get_kst
 import pandas as pd
 
 # ==========================================
-# 1. 초기 설정
+# 1. 초기 설정 및 보안 로드
 # ==========================================
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
-# 중요 정보를 코드에서 지우고 Secrets에서 가져오도록 변경
+# 중요 정보를 Secrets에서 가져오기
 ADMIN_PASSWORD = st.secrets["auth"]["admin_password"] 
 FIXED_INFO = st.secrets["school_info"]
 PATHS = {
@@ -18,12 +18,11 @@ PATHS = {
     "bg": "background.png"
 }
 
-# 서비스 연결
-conn = None
+# 구글 시트 서비스 연결
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error(f"데이터베이스 연결 오류: {e}")
+    st.error(f"데이터베이스 연결 실패: {e}")
 
 @st.cache_data(ttl=60)
 def get_cached_student_list():
@@ -33,6 +32,9 @@ def get_cached_student_list():
     except:
         return pd.DataFrame()
 
+# ==========================================
+# 2. 로그인 페이지 정의
+# ==========================================
 def login_page():
     st.title("🏫 경기기계공고 학생 인증")
     df_students = get_cached_student_list()
@@ -56,6 +58,8 @@ def login_page():
         if st.button("로그인", use_container_width=True):
             name_only = selected_user.split("(")[0]
             user_data = df_students[df_students['이름'] == name_only].iloc[0]
+            
+            # 비밀번호 형식 보정 (0 -> 0000)
             db_pw_raw = str(user_data['비밀번호']).strip().split('.')[0]
             db_pw = db_pw_raw.zfill(4) if (db_pw_raw.isdigit() and len(db_pw_raw) < 4) else db_pw_raw
             
@@ -69,21 +73,22 @@ def login_page():
             else:
                 st.error("비밀번호가 틀렸습니다.")
 
-# --- 로그인 체크 및 페이지 라우팅 ---
-
+# ==========================================
+# 3. 메인 로직 (세션 상태에 따른 분기)
+# ==========================================
 if 'login_info' not in st.session_state:
     st.session_state.login_info = None
 
-# 1. 로그인 전이면 로그인 페이지만 보여줌
+# 로그인 전
 if st.session_state.login_info is None:
     login_page()
 
-# 2. 로그인 성공 시에만 아래 코드들이 실행됨
+# 로그인 후 (에러 방지를 위해 모든 메뉴 코드를 else 안에 배치)
 else:
     user = st.session_state.login_info
     st.sidebar.title(f"👤 {user['name']}님")
     
-    # [주의] 이 아래 모든 코드는 반드시 한 칸(4칸) 들여쓰기가 되어 있어야 합니다.
+    # [권한별 메뉴 설정]
     if user['name'] == "교사":
         menu_list = ["메인 홈", "출결/서류 관리", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
     else:
@@ -96,13 +101,14 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    # 페이지 내용 출력 부분
+    # [메뉴별 페이지 라우팅]
     if menu == "메인 홈":
         st.title(f"👋 {user['name']}님, 환영합니다!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%Y-%m-%d %H:%M')}")
         st.info("왼쪽 메뉴를 선택하여 행정 업무를 진행하세요.")
     
     elif menu == "출결/서류 관리":
+        # 교사용 스마트 서류 크로스체크 모듈 호출
         attendance.show_page(conn)
         
     elif menu == "결석계 작성":
