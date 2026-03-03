@@ -5,34 +5,35 @@ from utils import get_kst
 
 def show_page(conn):
     st.title("🤖 스마트 서류 크로스체크")
-    st.info("기록된 특이사항 날짜가 학생들이 제출한 결석계 기간에 포함되는지 자동으로 대조합니다.")
+    st.info("특이사항을 기록하면 학생들이 제출한 결석계와 대조하여 서류 제출 여부를 실시간 판별합니다.")
 
-    # 1. 데이터 로드
+    # 1. 데이터 로드 및 전처리
     try:
+        # 학생명부 로드 및 번호 정수화
         df_students = conn.read(worksheet="학생명부", ttl=0)
         df_students = df_students[df_students['이름'] != '교사'].copy()
-        
-        # [수정] 번호 데이터 타입 정수 변환 (NaN 방지 포함)
         df_students['번호'] = pd.to_numeric(df_students['번호'], errors='coerce').fillna(0).astype(int)
         df_students = df_students.sort_values(by='번호')
         student_list = [f"{row['번호']}번 {row['이름']}" for _, row in df_students.iterrows()]
 
+        # 결석명부 (증빙 데이터)
         try:
             df_absence_reports = conn.read(worksheet="결석명부", ttl=0)
         except:
             df_absence_reports = pd.DataFrame()
 
+        # 출결특이사항 (교사 기록 데이터)
         try:
             df_special = conn.read(worksheet="출결특이사항", ttl=0)
         except:
             df_special = pd.DataFrame(columns=["날짜", "번호", "이름", "종류", "사유", "비고"])
 
     except Exception as e:
-        st.error(f"데이터 로드 중 오류가 발생했습니다: {e}")
+        st.error(f"데이터 로드 중 오류 발생: {e}")
         return
 
     # ---------------------------------------------------------
-    # PART 1: 특이사항 학생 추가 (입력부)
+    # PART 1: 특이사항 학생 추가 (상단 고정 입력부)
     # ---------------------------------------------------------
     st.subheader("➕ 특이사항 기록 추가")
     with st.form("add_special_form", clear_on_submit=True):
@@ -46,7 +47,7 @@ def show_page(conn):
 
         c4, c5 = st.columns([1.5, 2.5])
         with c4:
-            reason_type = st.selectbox("사유", ["질병", "인정", "기타"])
+            reason_type = st.selectbox("사유", ["질병", "미인정", "기타"])
         with c5:
             remark = st.text_input("비고 (나이스 입력용 사유 등)")
 
@@ -71,14 +72,14 @@ def show_page(conn):
     st.divider()
 
     # ---------------------------------------------------------
-    # PART 2: 서류 미제출자 자동 판별 로직 (확인부)
+    # PART 2: 월별 탭 구성 및 자동 판별 (하단 확인부)
     # ---------------------------------------------------------
-    st.subheader("📋 출결 기록 및 서류 대조 현황")
+    st.subheader("📋 월별 서류 대조 현황")
 
     if df_special.empty:
         st.info("기록된 특이사항이 아직 없습니다.")
     else:
-        # [핵심] 자동 판별 함수 (날짜 및 이름 매칭 강화)
+        # [Helper] 자동 판별 함수 (기존 로직 유지)
         def check_submission_robust(row, reports):
             if reports.empty: return "미제출(X)"
             try:
@@ -108,39 +109,53 @@ def show_page(conn):
                 return "미제출(X)"
             except: return "미제출(X)"
 
-        # 데이터 가공
-        df_display = df_special.copy()
-        
-        # [수정] 출력용 데이터프레임의 '번호' 컬럼 소수점 제거
-        df_display['번호'] = pd.to_numeric(df_display['번호'], errors='coerce').fillna(0).astype(int)
-        
-        with st.spinner("서류 대조 중..."):
-            df_display['서류제출'] = df_display.apply(lambda r: check_submission_robust(r, df_absence_reports), axis=1)
-        
-        # 최신순 정렬
-        df_display = df_display.sort_values(by=['날짜', '번호'], ascending=[False, True])
-
-        # 스타일 적용 함수
+        # [Helper] 미제출 하이라이트 스타일
         def style_rows(row):
             if row['서류제출'] == "미제출(X)":
                 return ['background-color: #FFEBEE; color: #D32F2F; font-weight: bold'] * len(row)
             return [''] * len(row)
 
-        # [수정] 결과 표 출력 부분 (Column Config 적용)
-        st.write("💡 학생이 제출한 결석계 기간과 교사가 기록한 날짜를 실시간 대조합니다.")
-        st.dataframe(
-            df_display.style.apply(style_rows, axis=1),
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "번호": st.column_config.NumberColumn("번호", format="%d", width="small"), # %d로 정수 출력 강제
-                "날짜": st.column_config.TextColumn("특이사항 날짜", width="medium"),
-                "이름": st.column_config.TextColumn("성명", width="small"),
-                "종류": st.column_config.TextColumn("구분", width="small"),
-                "서류제출": st.column_config.TextColumn("📑 제출여부", width="medium")
-            }
-        )
+        # 데이터 가공: 번호 정수화 및 서류 판별
+        df_processed = df_special.copy()
+        df_processed['번호'] = pd.to_numeric(df_processed['번호'], errors='coerce').fillna(0).astype(int)
         
+        with st.spinner("서류 대조 중..."):
+            df_processed['서류제출'] = df_processed.apply(lambda r: check_submission_robust(r, df_absence_reports), axis=1)
+            # 날짜 컬럼에서 월(Month) 정보 추출
+            df_processed['월'] = pd.to_datetime(df_processed['날짜']).dt.month
+        
+        # 월별 탭 생성 (3월 ~ 12월)
+        month_labels = [f"{m}월" for m in range(3, 13)]
+        tabs = st.tabs(month_labels)
+
+        for i, tab in enumerate(tabs):
+            current_month = i + 3
+            with tab:
+                # 해당 월 데이터 필터링
+                month_df = df_processed[df_processed['월'] == current_month].copy()
+                
+                if month_df.empty:
+                    st.write(f"📅 {current_month}월에 기록된 특이사항이 없습니다.")
+                else:
+                    # 최신순 정렬
+                    month_df = month_df.sort_values(by=['날짜', '번호'], ascending=[False, True])
+                    
+                    # 불필요한 '월' 컬럼은 제거하고 표시
+                    display_cols = ["날짜", "번호", "이름", "종류", "사유", "서류제출", "비고"]
+                    
+                    st.dataframe(
+                        month_df[display_cols].style.apply(style_rows, axis=1),
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "번호": st.column_config.NumberColumn("번호", format="%d", width="small"),
+                            "날짜": st.column_config.TextColumn("특이사항 날짜", width="medium"),
+                            "서류제출": st.column_config.TextColumn("📑 제출여부", width="medium"),
+                            "비고": st.column_config.TextColumn("상세 사유", width="large")
+                        }
+                    )
+        
+        # 관리 기능
         with st.expander("🗑️ 데이터 관리"):
             if st.button("출결 기록 전체 초기화 (주의)"):
                 empty_df = pd.DataFrame(columns=["날짜", "번호", "이름", "종류", "사유", "비고"])
