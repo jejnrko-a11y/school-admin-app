@@ -4,7 +4,7 @@ from utils import get_kst
 
 def show_page(conn):
     st.title("📅 학급 시간표")
-    st.write("3학년 2반(컴퓨터전자과) 시간표입니다.")
+    st.markdown("### 3학년 2반 (컴퓨터전자과)")
 
     try:
         # 1. 구글 시트에서 시간표 읽기
@@ -14,8 +14,14 @@ def show_page(conn):
             st.warning("시간표 데이터가 없습니다. 구글 시트를 확인해 주세요.")
             return
 
-        # 2. 데이터 전처리: nan을 빈칸으로 변경
+        # 2. 데이터 전처리
         df = df.fillna('')
+        
+        # 주간 시간표 본체 (교시 ~ 금요일까지만 선택)
+        timetable_main = df[['교시', '월', '화', '수', '목', '금']]
+        
+        # 과목 상세 정보 (과목, 담당교사 컬럼만 추출하여 중복 제거)
+        subject_info = df[['과목', '담당교사']].replace('', None).dropna().drop_duplicates()
 
         # 3. 오늘 요일 파악
         now = get_kst()
@@ -23,68 +29,85 @@ def show_page(conn):
         days_kor = ["월", "화", "수", "목", "금", "토", "일"]
         today_name = days_kor[weekday]
 
-        # 4. 강제 중앙 정렬 및 인덱스 숨기기를 위한 CSS
-        # st.table의 기본 스타일을 덮어씌웁니다.
+        # 4. 스타일 정의 (중앙 정렬 및 디자인)
         st.markdown("""
             <style>
+            .timetable-container {
+                margin-top: 20px;
+                margin-bottom: 30px;
+            }
             .styled-table {
                 width: 100%;
                 border-collapse: collapse;
-                text-align: center;
+                border-radius: 10px;
+                overflow: hidden;
+                box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
             }
             .styled-table th {
                 background-color: #1E3A8A !important;
                 color: white !important;
                 text-align: center !important;
-                padding: 12px !important;
+                padding: 15px !important;
+                font-weight: bold;
             }
             .styled-table td {
                 text-align: center !important;
-                padding: 10px !important;
-                border: 1px solid #dee2e6 !important;
+                padding: 12px !important;
+                border: 1px solid #f3f4f6 !important;
+                font-size: 15px;
             }
-            /* 오늘 요일 강조색 */
             .today-highlight {
-                background-color: #EBF5FF !important;
+                background-color: #DBEAFE !important;
                 font-weight: bold !important;
+                color: #1E40AF !important;
+            }
+            .subject-card {
+                background-color: white;
+                padding: 15px;
+                border-radius: 10px;
+                border-left: 5px solid #2563EB;
+                margin-bottom: 10px;
+                box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
             }
             </style>
         """, unsafe_allow_html=True)
 
-        # 5. 오늘 요일 하이라이트 함수
-        def apply_styles(row):
-            styles = ['' * len(row)]
-            # 로직은 아래 HTML 생성 시 처리
-            return styles
-
-        # 6. HTML 테이블 직접 생성 (가장 확실한 중앙 정렬 및 인덱스 제거 방법)
-        html = '<table class="styled-table"><thead><tr>'
-        
-        # 헤더 생성
-        for col in df.columns:
+        # 5. 주간 시간표 HTML 생성
+        html = '<div class="timetable-container"><table class="styled-table"><thead><tr>'
+        for col in timetable_main.columns:
             html += f'<th>{col}</th>'
         html += '</tr></thead><tbody>'
 
-        # 본문 생성
-        for _, row in df.iterrows():
+        for _, row in timetable_main.iterrows():
             html += '<tr>'
             for col_name, value in row.items():
-                # 오늘 요일인 칸에만 하이라이트 클래스 추가
-                highlight_class = 'today-highlight' if col_name == today_name else ''
-                html += f'<td class="{highlight_class}">{value}</td>'
+                highlight = 'today-highlight' if col_name == today_name else ''
+                # 엑셀의 화살표(∇) 기호가 있을 경우 디자인적 허용 또는 처리
+                display_value = value if value != '▽' else '<span style="color:#ccc;">"</span>'
+                html += f'<td class="{highlight}">{display_value}</td>'
             html += '</tr>'
-        html += '</tbody></table>'
+        html += '</tbody></table></div>'
 
-        # 7. 요일 안내 메시지
+        # 6. 상단 요일 안내
         if weekday < 5:
-            st.success(f"오늘은 **{today_name}요일**입니다.")
+            st.success(f"📢 오늘은 **{today_name}요일**입니다. 수업 일정을 확인하세요!")
         else:
-            st.info("주말입니다. 다음 주 시간표를 미리 확인하세요.")
+            st.info("😎 즐거운 주말입니다! 다음 주 시간표를 미리 확인하세요.")
 
-        # 8. 최종 결과물 출력
+        # 7. 시간표 출력
         st.markdown(html, unsafe_allow_html=True)
-        
-        st.caption("\n※ 시간표는 학교 사정에 따라 변경될 수 있습니다.")
+
+        # 8. 하단 과목 상세 정보 (카드 형태)
+        with st.expander("🔍 과목별 상세 정보 및 담당 선생님", expanded=True):
+            cols = st.columns(2)
+            for idx, (_, row) in enumerate(subject_info.iterrows()):
+                target_col = cols[idx % 2]
+                target_col.markdown(f"""
+                <div class="subject-card">
+                    <small style="color: #6B7280;">과목명</small>< dream style="display:block; font-weight:bold; color: #1E3A8A;">{row['과목']}</dream>
+                    <small style="color: #6B7280;">담당</small><span style="display:block;">{row['담당교사']} 선생님</span>
+                </div>
+                """, unsafe_allow_html=True)
 
     except Exception as e:
-        st.error(f"시간표 로드 오류: {e}")
+        st.error(f"시간표를 불러오는 중 오류가 발생했습니다. 시트 구성을 확인해주세요. ({e})")
