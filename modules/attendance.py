@@ -47,7 +47,7 @@ def show_page(conn):
 
         c4, c5 = st.columns([1.5, 2.5])
         with c4:
-            reason_type = st.selectbox("사유", ["질병", "미인정", "기타"])
+            reason_type = st.selectbox("사유", ["질병", "인정", "미인정", "기타"])
         with c5:
             remark = st.text_input("비고 (나이스 입력용 사유 등)")
 
