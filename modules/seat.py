@@ -5,7 +5,7 @@ import random
 def show_page(conn, user):
     st.title("🪑 지능형 조건부 자리배치")
 
-    # --- 1. CSS 스타일 (교실 테마) ---
+    # --- 1. CSS 스타일 ---
     st.markdown("""
         <style>
         .blackboard {
@@ -27,55 +27,68 @@ def show_page(conn, user):
         }
         .seat-name { font-weight: bold; font-size: 15px; color: #333; line-height: 1.2; }
         .seat-x { color: #ff5252; font-weight: bold; font-size: 20px; }
+        .cond-label { font-size: 13px; font-weight: bold; color: #1E3A8A; margin-top: 5px; }
         </style>
     """, unsafe_allow_html=True)
 
-    # --- 2. 데이터 로드 및 전처리 ---
+    # --- 2. 데이터 로드 ---
     try:
         df_seat = conn.read(worksheet="자리배치", ttl=0)
         df_students = conn.read(worksheet="학생명부", ttl=0)
         df_students = df_students[df_students['이름'] != '교사'].copy()
         df_students['번호'] = pd.to_numeric(df_students['번호'], errors='coerce').fillna(0).astype(int)
         df_students = df_students.sort_values(by='번호')
-        
-        # 전체 학생 리스트 (이름(번호번) 형식)
         all_students = [f"{row['이름']}({row['번호']}번)" for _, row in df_students.iterrows()]
     except Exception as e:
         st.error(f"데이터 로드 오류: {e}")
         return
 
-    # 고정석 X 좌표 (E4, E5 -> 5분단 아래쪽 두 칸)
-    fixed_x_coords = [(2, 4), (3, 4)]
+    fixed_x_coords = [(2, 4), (3, 4)] # E4, E5 고정석
 
     # --- 3. 교사 전용 조건 설정 폼 ---
-    cond_adj, cond_sep, cond_front, cond_back, cond_win, cond_hall = [], [], [], [], [], []
+    fb_pairs = [] # 앞뒤 짝궁 리스트
+    ss_pairs = [] # 양옆 짝궁 리스트
+    cond_sep, cond_front, cond_back, cond_win, cond_hall = [], [], [], [], []
     
     if user['name'] == "교사":
         with st.expander("⚙️ 특별 자리배치 조건 설정 (셔플 시 적용)"):
-            st.info("💡 왼쪽(1분단)이 창가, 오른쪽(5분단)이 복도입니다.")
-            cond_adj = st.multiselect("🤝 옆자리 지정 (서로 인접해야 함)", all_students)
-            cond_sep = st.multiselect("💢 분리 지정 (서로 인접 불가)", all_students)
-            cond_front = st.multiselect("📏 앞자리 지정 (1열 배치)", all_students)
-            cond_back = st.multiselect("📺 뒷자리 지정 (4열 배치)", all_students)
-            cond_win = st.multiselect("🪟 창가 지정 (왼쪽 1분단 배치)", all_students)
-            cond_hall = st.multiselect("🚪 복도 지정 (오른쪽 5분단 배치)", all_students)
+            st.info("💡 각 짝궁은 2명씩 선택해 주세요. (최대 3커플씩 가능)")
+            
+            # 앞뒤 짝궁 (세로 인접)
+            st.markdown('<p class="cond-label">↕️ 앞뒤 짝궁 지정 (세로로 인접)</p>', unsafe_allow_html=True)
+            cols_fb = st.columns(3)
+            for i in range(3):
+                p = cols_fb[i].multiselect(f"앞뒤 커플 {i+1}", all_students, max_selections=2, key=f"fb_{i}")
+                if len(p) == 2: fb_pairs.append(p)
+
+            # 양옆 짝궁 (가로 인접)
+            st.markdown('<p class="cond-label">↔️ 양옆 짝궁 지정 (가로로 인접)</p>', unsafe_allow_html=True)
+            cols_ss = st.columns(3)
+            for i in range(3):
+                p = cols_ss[i].multiselect(f"양옆 커플 {i+1}", all_students, max_selections=2, key=f"ss_{i}")
+                if len(p) == 2: ss_pairs.append(p)
+
+            st.markdown('<p class="cond-label">🚫 기타 배치 조건</p>', unsafe_allow_html=True)
+            cond_sep = st.multiselect("💢 분리 지정 (절대 인접 불가)", all_students)
+            cond_front = st.multiselect("📏 앞자리 지정 (1열)", all_students)
+            cond_back = st.multiselect("📺 뒷자리 지정 (4열)", all_students)
+            cond_win = st.multiselect("🪟 창가 지정 (1분단)", all_students)
+            cond_hall = st.multiselect("🚪 복도 지정 (5분단)", all_students)
 
         c1, c2 = st.columns(2)
         
         with c1:
             if st.button("🎲 조건부 자리 바꾸기", use_container_width=True):
                 success = False
-                max_attempts = 15000 # 조건이 늘어났으므로 시도 횟수 상향
+                max_attempts = 20000 
                 
-                with st.spinner("최적의 배치를 계산 중입니다..."):
+                with st.spinner("복합 조건을 만족하는 최적의 배치를 계산 중입니다..."):
                     for attempt in range(max_attempts):
-                        # 1. 셔플
                         shuffled = all_students.copy()
                         random.shuffle(shuffled)
                         
-                        # 2. 가상 그리드 배치 (X자리 고려)
                         temp_grid = [["" for _ in range(5)] for _ in range(4)]
-                        s_map = {} # 이름: (r, c) 매핑 저장
+                        s_map = {}
                         s_idx = 0
                         for r in range(4):
                             for c in range(5):
@@ -87,60 +100,46 @@ def show_page(conn, user):
                                     s_map[name] = (r, c)
                                     s_idx += 1
                         
-                        # 3. 조건 검증 로직
                         valid = True
                         
-                        # 검증 함수: 인접 여부 (상하좌우)
-                        def is_neighbor(p1, p2):
-                            return abs(p1[0] - p2[0]) + abs(p1[1] - p2[1]) == 1
-
-                        # 조건 1: 옆자리 (선택된 이들이 서로 인접)
-                        if cond_adj and len(cond_adj) > 1:
-                            for name in cond_adj:
-                                if not any(is_neighbor(s_map[name], s_map[other]) for other in cond_adj if name != other):
-                                    valid = False; break
+                        # 검증 1: 앞뒤 짝궁 (같은 열, 행 차이 1)
+                        for p in fb_pairs:
+                            pos1, pos2 = s_map[p[0]], s_map[p[1]]
+                            if not (pos1[1] == pos2[1] and abs(pos1[0] - pos2[0]) == 1):
+                                valid = False; break
                         
-                        # 조건 2: 분리 (선택된 이들끼리 누구도 인접 불가)
+                        # 검증 2: 양옆 짝궁 (같은 행, 열 차이 1)
+                        if valid:
+                            for p in ss_pairs:
+                                pos1, pos2 = s_map[p[0]], s_map[p[1]]
+                                if not (pos1[0] == pos2[0] and abs(pos1[1] - pos2[1]) == 1):
+                                    valid = False; break
+
+                        # 검증 3: 분리 (상하좌우 인접 불가)
                         if valid and cond_sep and len(cond_sep) > 1:
                             for i in range(len(cond_sep)):
                                 for j in range(i + 1, len(cond_sep)):
-                                    if is_neighbor(s_map[cond_sep[i]], s_map[cond_sep[j]]):
+                                    p1, p2 = s_map[cond_sep[i]], s_map[cond_sep[j]]
+                                    if abs(p1[0]-p2[0]) + abs(p1[1]-p2[1]) == 1:
                                         valid = False; break
                                 if not valid: break
 
-                        # 조건 3: 앞자리 (Row 0)
-                        if valid and cond_front:
-                            if any(s_map[name][0] != 0 for name in cond_front):
-                                valid = False
-                        
-                        # 조건 4: 뒷자리 (Row 3)
-                        if valid and cond_back:
-                            if any(s_map[name][0] != 3 for name in cond_back):
-                                valid = False
-                        
-                        # 조건 5: 창가 지정 (Col 0 - 1분단)
-                        if valid and cond_win:
-                            if any(s_map[name][1] != 0 for name in cond_win):
-                                valid = False
-                        
-                        # 조건 6: 복도 지정 (Col 4 - 5분단)
-                        if valid and cond_hall:
-                            # 5분단 아래쪽 X자리는 배정되지 않으므로 자동 필터링됨
-                            if any(s_map[name][1] != 4 for name in cond_hall):
-                                valid = False
+                        # 나머지 조건 검증
+                        if valid and cond_front and any(s_map[n][0] != 0 for n in cond_front): valid = False
+                        if valid and cond_back and any(s_map[n][0] != 3 for n in cond_back): valid = False
+                        if valid and cond_win and any(s_map[n][1] != 0 for n in cond_win): valid = False
+                        if valid and cond_hall and any(s_map[n][1] != 4 for n in cond_hall): valid = False
                         
                         if valid:
-                            # 모든 조건 만족 시 시트 업데이트
                             new_df = pd.DataFrame(temp_grid, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
                             conn.update(worksheet="자리배치", data=new_df)
-                            success = True
-                            break
+                            success = True; break
                 
                 if success:
-                    st.toast("✅ 조건을 모두 만족하는 배치를 찾았습니다!")
+                    st.toast("✅ 모든 커플 및 배치 조건을 만족합니다!")
                     st.rerun()
                 else:
-                    st.error("❌ 조건이 너무 까다로워 배치를 찾지 못했습니다. 조건을 조금만 완화해 주세요.")
+                    st.error("❌ 조건이 너무 복잡하여 배치를 찾지 못했습니다. 커플 수를 줄이거나 조건을 완화해 주세요.")
 
         with c2:
             if st.button("🔢 번호순(1분단부터)", use_container_width=True):
@@ -149,22 +148,15 @@ def show_page(conn, user):
                 s_idx = 0
                 for c in range(5):
                     for r in range(4):
-                        if (r, c) in fixed_x_coords:
-                            new_grid[r][c] = "X"
+                        if (r, c) in fixed_x_coords: new_grid[r][c] = "X"
                         elif s_idx < len(ordered):
                             new_grid[r][c] = ordered[s_idx]
                             s_idx += 1
-                
                 new_df = pd.DataFrame(new_grid, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
                 conn.update(worksheet="자리배치", data=new_df)
                 st.rerun()
-        st.divider()
 
-    # --- 4. 시각적 배치 출력 (창가/복도 정보 표시) ---
-    col_info1, col_info2, col_info3 = st.columns([1, 3, 1])
-    col_info1.markdown("<div style='text-align:center; color:#666;'>🪟 창가</div>", unsafe_allow_html=True)
-    col_info3.markdown("<div style='text-align:center; color:#666;'>🚪 복도</div>", unsafe_allow_html=True)
-
+    # --- 4. 시각적 출력 ---
     st.markdown('<div class="blackboard">칠 판 (Front)</div>', unsafe_allow_html=True)
     st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
 
@@ -179,5 +171,3 @@ def show_page(conn, user):
                     st.markdown(f'<div class="seat-card"><div class="seat-name">{val}</div></div>', unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="seat-card" style="border:1px dashed #ccc;"></div>', unsafe_allow_html=True)
-
-    st.info("💡 1분단(왼쪽)이 창가석, 5분단(오른쪽)이 복도석입니다.")
