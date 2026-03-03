@@ -1,6 +1,6 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
-from modules import absence, teacher_admin, settings, timetable, attendance # import 정리
+from modules import absence, teacher_admin, settings, timetable, attendance
 from utils import get_kst
 import pandas as pd
 
@@ -81,11 +81,12 @@ else:
     st.sidebar.title(f"👤 {user['name']}님")
     
     # 1. 권한별 메뉴 구성
-    if user['name'] == "교사":
-        menu_list = ["메인 홈", "일일 출결 체크", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
-    else:
-        st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
-        menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
+if user['name'] == "교사":
+    # 메뉴명을 직관적으로 '출결/서류 관리'로 변경
+    menu_list = ["메인 홈", "출결/서류 관리", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경", "교사용 관리"]
+else:
+    # 학생 메뉴
+    menu_list = ["메인 홈", "결석계 작성", "시간표 확인", "자리배치", "비밀번호 변경"]
 
     # 2. 사이드바 메뉴 선택
     menu = st.sidebar.radio("행정 메뉴", menu_list)
@@ -99,8 +100,8 @@ else:
         st.title(f"👋 {user['name']}님, 환영합니다!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%Y-%m-%d %H:%M')}")
         st.info("왼쪽 메뉴를 선택하여 행정 업무를 진행하세요.")
-    elif menu == "일일 출결 체크":
-        attendance.show_page(conn)        
+    elif menu == "출결/서류 관리":  # 추가된 부분
+        attendance.show_page(conn)
     elif menu == "결석계 작성":
         absence.show_page(conn, user, FIXED_INFO, PATHS)
     elif menu == "시간표 확인":
