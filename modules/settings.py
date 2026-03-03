@@ -1,47 +1,46 @@
 import streamlit as st
 import pandas as pd
 
-def show_page(conn):
-    st.title("🪑 우리 반 자리배치표")
-    st.markdown("### 3학년 2반 교실 Layout")
-
-    try:
-        # 1. 구글 시트에서 자리배치 탭 읽기
-        df = conn.read(worksheet="자리배치", ttl=60)
-        df = df.fillna('') # 빈칸 처리
-
-        # 2. 교실 디자인 스타일
-        st.markdown("""
-            <style>
-            .teacher-desk {
-                background-color: #4B5563; color: white; text-align: center;
-                padding: 15px; border-radius: 10px; margin: 20px auto;
-                width: 50%; font-weight: bold; border: 2px solid #1F2937;
-            }
-            .seat-box {
-                background-color: #ffffff; border: 2px solid #D1D5DB;
-                border-radius: 8px; padding: 15px 5px; text-align: center;
-                margin-bottom: 10px; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
-                height: 80px; display: flex; flex-direction: column; justify-content: center;
-            }
-            .seat-name { font-weight: bold; color: #1E3A8A; font-size: 16px; }
-            </style>
-        """, unsafe_allow_html=True)
-
-        # 3. 교탁 배치
-        st.markdown('<div class="teacher-desk">🖥️ 교 탁 (칠판 방향)</div>', unsafe_allow_html=True)
-
-        # 4. 4행 5열 배치 (엑셀 데이터 기준)
-        for _, row in df.iterrows():
-            cols = st.columns(5)
-            for i in range(5):
-                # 엑셀 열 개수가 5개보다 적을 경우를 대비
-                name = row.iloc[i] if i < len(row) else ""
-                with cols[i]:
-                    if str(name).strip():
-                        st.markdown(f'<div class="seat-box"><div class="seat-name">{name}</div></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown('<div class="seat-box" style="background-color:#f9fafb; border-style:dashed;"></div>', unsafe_allow_html=True)
-
-    except Exception as e:
-        st.error(f"자리배치 데이터를 불러오지 못했습니다. 시트 이름을 확인하세요: {e}")
+def show_page(conn, user):
+    st.title("⚙️ 비밀번호 변경")
+    st.write(f"**{user['name']}** 학생의 비밀번호를 안전하게 변경합니다.")
+    
+    with st.form("pw_change_form"):
+        curr_pw = st.text_input("현재 비밀번호", type="password")
+        new_pw = st.text_input("새 비밀번호 (4자리 이상)", type="password")
+        conf_pw = st.text_input("새 비밀번호 확인", type="password")
+        
+        submit = st.form_submit_button("비밀번호 변경 완료")
+        
+        if submit:
+            try:
+                # 1. 최신 명부 데이터 로드
+                df = conn.read(worksheet="학생명부", ttl=0)
+                user_idx = df[df['이름'] == user['name']].index[0]
+                
+                # 2. 시트 내 비밀번호 형식 보정 (0 -> 0000)
+                db_pw_raw = str(df.loc[user_idx, '비밀번호']).strip().split('.')[0]
+                if db_pw_raw.isdigit() and len(db_pw_raw) < 4:
+                    db_pw = db_pw_raw.zfill(4)
+                else:
+                    db_pw = db_pw_raw
+                
+                # 3. 일치 여부 검증
+                if str(curr_pw).strip() != db_pw:
+                    st.error(f"현재 비밀번호가 일치하지 않습니다.")
+                elif new_pw != conf_pw:
+                    st.error("새 비밀번호가 서로 일치하지 않습니다.")
+                elif len(new_pw) < 4:
+                    st.error("비밀번호는 최소 4자리 이상이어야 합니다.")
+                else:
+                    # 4. 구글 시트에 업데이트
+                    df.loc[user_idx, '비밀번호'] = str(new_pw)
+                    conn.update(worksheet="학생명부", data=df)
+                    
+                    # 5. [중요] 비밀번호가 바뀌었으므로 메인 페이지의 캐시를 삭제
+                    st.cache_data.clear()
+                    
+                    st.success("✅ 비밀번호가 성공적으로 변경되었습니다! 다음 로그인부터 적용됩니다.")
+                    st.balloons()
+            except Exception as e:
+                st.error(f"변경 중 오류가 발생했습니다: {e}")
