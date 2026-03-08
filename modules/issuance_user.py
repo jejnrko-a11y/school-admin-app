@@ -1,277 +1,120 @@
-import streamlit as st
-import pandas as pd
-from datetime import datetime
-import streamlit.components.v1 as components
-from utils import get_kst
-
-def show_page(conn, user, fixed_info):
-    # CSS 설정 (인쇄 및 UI)
-    st.markdown("""
-        <style>
-        [data-testid="stDataFrame"] { font-size: 12px !important; }
-        @media print {
-            header, [data-testid="stHeader"], [data-testid="stSidebar"], footer { display: none !important; }
-            .stButton, .no-print, [data-testid="stForm"], .stTabs [role="tablist"] { display: none !important; }
-            .cert-container { border: 2px solid #000 !important; padding: 40px !important; }
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    st.title("📜조퇴/외출/교내활동증 신청")
-    
-    # 데이터 로드 (에러 방지 처리)
-    try:
-        df_log = conn.read(worksheet="발급명부", ttl=0)
-    except Exception:
-        st.error("⚠️ 구글 시트에 '발급명부' 탭이 없습니다. 시트에 '발급명부' 이름의 탭을 생성해 주세요.")
-        return
-
-    tab1, tab2 = st.tabs(["✍️ 신규 신청", "📂 내 신청 내역"])
-
-    # --- 탭 1: 신청서 작성 ---
-    with tab1:
-        # [출석체크 로직 반영] 날짜를 폼 외부로 빼서 슬라이더가 즉시 반응하게 함
-        if 'issuance_date' not in st.session_state:
-            st.session_state.issuance_date = get_kst().date()
-            
-        target_date = st.date_input("발생 날짜 선택", value=st.session_state.issuance_date, key="date_picker")
-
-        # 요일별 교시 로직 (화요일 감지)
-        weekday = target_date.weekday()
-        period_options = ["조회", "1교시", "2교시", "3교시", "4교시", "5교시", "6교시"]
-        if weekday == 1: period_options.append("7교시")
-        period_options.append("종례")
-
-        # 날짜 변경 시 슬라이더 초기화
-        if target_date != st.session_state.issuance_date:
-            st.session_state.issuance_slider = (period_options[0], period_options[-1])
-            st.session_state.issuance_date = target_date
-
-        if 'issuance_slider' not in st.session_state:
-            st.session_state.issuance_slider = (period_options[0], period_options[-1])
-
-        with st.form("request_form", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            with c1:
-                cert_type = st.selectbox("증명서 종류", ["조퇴증", "외출증", "교내활동증"])
-            with c2:
-                destination = st.text_input("행선지(장소)", placeholder="예: 병원, 가정, 과학관")
-            
-            reason = st.text_input("상세 사유", placeholder="예: 독감으로 인한 병원 진료 등")
-
-            st.write(f"⏰ **{target_date.strftime('%m/%d')} ({['월','화','수','목','금','토','일'][weekday]}) 교시 선택**")
-            time_range = st.select_slider(
-                "드래그하여 범위를 선택하세요", 
-                options=period_options, 
-                value=st.session_state.issuance_slider
-            )
-            
-            if st.form_submit_button("🚀 신청서 제출", use_container_width=True):
-                if not destination or not reason:
-                    st.error("행선지와 사유를 모두 입력해 주세요.")
-                else:
-                    # 데이터 정리
-                    period_str = f"{time_range[0]}~{time_range[1]}" if time_range[0] != time_range[1] else time_range[0]
-                    new_data = pd.DataFrame([{
-                        "일련번호": "-", 
-                        "신청일시": get_kst().strftime("%m-%d %H:%M"),
-                        "이름": user['name'], 
-                        "번호": user['num'], 
-                        "종류": cert_type,
-                        "시간": f"{target_date.strftime('%m/%d')} ({period_str})",
-                        "행선지": destination, 
-                        "사유": reason, 
-                        "상태": "신청", 
-                        "승인일시": "-"
-                    }])
-                    
-                    try:
-                        updated_df = pd.concat([df_log, new_data], ignore_index=True)
-                        conn.update(worksheet="발급명부", data=updated_df)
-                        st.success("신청되었습니다! 교사용 메뉴에서 승인 후 인쇄 가능합니다.")
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"데이터 저장 실패: {e}")
-
-    # --- 탭 2: 내 내역 확인 및 인쇄 ---
-    with tab2:
-        my_log = df_log[df_log['이름'] == user['name']].sort_values(by="신청일시", ascending=False)
-        if my_log.empty:
-            st.info("신청 내역이 없습니다.")
-        else:
-            for idx, row in my_log.iterrows():
-                status_icon = {"신청": "🔵", "승인": "🟢", "반려": "🔴"}.get(row['상태'], "⚪")
-                with st.expander(f"{status_icon} [{row['상태']}] {row['신청일시']} - {row['종류']}"):
-                    st.write(f"**시간:** {row['시간']} | **행선지:** {row['행선지']}")
-                    st.write(f"**사유:** {row['사유']}")
-                    
-                    if row['상태'] == "승인":
-                        st.success(f"✅ 승인번호: {row['일련번호']} (승인일시: {row['승인일시']})")
-                        if st.button("🖨️ 증명서 보기/인쇄", key=f"print_{idx}"):
-                            render_certificate(row, fixed_info)
-                    elif row['상태'] == "반려":
-                        st.error("❌ 이 신청은 반려되었습니다. 선생님께 사유를 문의하세요.")
-
 import base64
 import os
 
 def render_certificate(row, fixed_info):
-    # 1. 직인 이미지 처리 (Base64 변환하여 HTML 삽입)
-    seal_path = "teacher_seal.png"
-    seal_base64 = ""
-    if os.path.exists(seal_path):
-        with open(seal_path, "rb") as f:
-            seal_base64 = base64.b64encode(f.read()).decode()
+    # 1. 교사 직인 이미지 처리 (Base64 인코딩)
+    seal_html = ""
+    if os.path.exists("teacher_seal.png"):
+        with open("teacher_seal.png", "rb") as f:
+            seal_b64 = base64.b64encode(f.read()).decode()
+            seal_html = f'<img src="data:image/png;base64,{seal_b64}" style="position:absolute; width:45px; margin-left:-35px; margin-top:-10px; opacity:0.8;">'
+
+    # 2. 데이터 정리
+    dept = str(fixed_info.get('dept', '')).replace('.0', '')
+    grade = str(fixed_info.get('grade', '')).replace('.0', '')
+    cls = str(fixed_info.get('cls', '')).replace('.0', '')
+    num = str(row['번호']).replace('.0', '')
+    name = row['이름']
     
-    # 2. 날짜 데이터 파싱 (2026-03-08 -> 2026, 03, 08)
-    # row['시간']에 포함된 날짜나 신청일시를 기준으로 추출
+    # 날짜 파싱 (신청일시 또는 행정날짜)
     try:
-        current_date = datetime.strptime(row['신청일시'].split(' ')[0], "%m-%d")
-        year = "2026" # 현재 연도
-        month = current_date.strftime("%m")
-        day = current_date.strftime("%d")
+        # row['시간']에 포함된 MM/DD 추출 시도 (예: "03/10 (1교시~3교시)")
+        date_part = row['시간'].split(' ')[0] # "03/10"
+        m, d = date_part.split('/')
+        year_str = str(datetime.now().year)
     except:
-        year, month, day = "20  ", "  ", "  "
+        m, d = "  ", "  "
+        year_str = "20  "
 
-    # 3. 양식 선택 및 제목 설정
-    is_activity = row['종류'] == "교내활동증"
-    title = "학 생 교 내 활 동 확 인 증" if is_activity else "조 퇴, 외 출 증"
-    confirm_text = "상기학생의 교내활동을 확인함." if is_activity else "상기학생의 조퇴, 외출을 허가함."
-    teacher_label = "담당교사 :" if is_activity else "담임 :"
-
-    # 4. HTML/CSS 레이아웃 (A4 가로 최적화)
-    html_layout = f"""
-    <style>
-        @media print {{
-            @page {{ size: A4 landscape; margin: 10mm; }}
-            body {{ margin: 0; padding: 0; }}
-            .no-print {{ display: none !important; }}
-        }}
-        .cert-wrapper {{
-            width: 140mm; /* A4 가로의 절반 정도 크기 */
-            margin: 0 auto;
-            padding: 10px;
-            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
-            color: black;
-            border: 1px solid #eee;
-        }}
-        .cert-table {{
-            width: 100%;
-            border-collapse: collapse;
-            border: 2px solid black;
-        }}
-        .cert-table th, .cert-table td {{
-            border: 1px solid black;
-            height: 40px;
-            text-align: center;
-            font-size: 14px;
-        }}
-        .title-box {{
-            background-color: #e8eefc;
-            font-size: 22px !important;
-            font-weight: bold;
-            height: 50px !important;
-        }}
-        .info-header {{
-            background-color: #e8eefc;
-            height: 35px !important;
-        }}
-        .label-cell {{
-            background-color: white;
-            width: 80px;
-            font-weight: bold;
-        }}
-        .content-cell {{
-            text-align: left;
-            padding-left: 10px;
-        }}
-        .footer-section {{
-            margin-top: 15px;
-            text-align: center;
-        }}
-        .school-name {{
-            font-size: 24px;
-            font-weight: bold;
-            letter-spacing: 10px;
-            margin-top: 20px;
-        }}
-        .seal-container {{
-            position: relative;
-            display: inline-block;
-        }}
-        .seal-img {{
-            position: absolute;
-            top: -20px;
-            right: -40px;
-            width: 50px;
-            opacity: 0.8;
-        }}
-    </style>
-
-    <div class="cert-wrapper">
-        <table class="cert-table">
-            <tr>
-                <th colspan="10" class="title-box">{title}</th>
+    # 3. 양식 분기 처리
+    if row['종류'] == "교내활동증":
+        # --- [양식 2: 학생 교내 활동 확인증] ---
+        title = "학 생 교 내 활 동 확 인 증"
+        content_html = f"""
+        <table style="width:100%; border-collapse:collapse; border:1.5px solid black;">
+            <tr style="background-color:#E7E6E6; height:35px; border-bottom:1.5px solid black;">
+                <td colspan="2" style="text-align:center; font-size:16px; font-weight:bold; letter-spacing:2px;">
+                    {dept} 과 &nbsp;&nbsp; {grade} 학년 &nbsp;&nbsp; {cls} 반 &nbsp;&nbsp; {num} 번 &nbsp;&nbsp; 성명: {name}
+                </td>
             </tr>
-            <tr class="info-header">
-                <td colspan="2">과</td>
-                <td colspan="2">학년</td>
-                <td colspan="2">반</td>
-                <td colspan="2">번</td>
-                <td colspan="2">성명:</td>
+            <tr style="height:80px;">
+                <td style="width:15%; border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; line-height:1.2;">교내<br>활동<br>사유</td>
+                <td style="width:85%; border:1px solid black; padding:10px; text-align:left; vertical-align:top;">{row['사유']}</td>
             </tr>
-            <tr>
-                <td colspan="2" style="font-size:12px;">{fixed_info.get('dept', '기계과')}</td>
-                <td colspan="2">{fixed_info.get('grade', '-')}</td>
-                <td colspan="2">{fixed_info.get('cls', '-')}</td>
-                <td colspan="2">{row['번호']}</td>
-                <td colspan="2">{row['이름']}</td>
+            <tr style="height:45px;">
+                <td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold;">장소</td>
+                <td style="border:1px solid black; padding-left:10px; text-align:left;">{row['행선지']}</td>
             </tr>
-            
-            {"" if is_activity else ""}
-            {f'''
-            <tr>
-                <td rowspan="2" class="label-cell">교내<br>활동<br>사유</td>
-                <td colspan="9" rowspan="2" class="content-cell">{row['사유']}</td>
-            </tr>
-            <tr style="display:none;"></tr>
-            <tr>
-                <td class="label-cell">장소</td>
-                <td colspan="9" class="content-cell">{row['행선지']}</td>
-            </tr>
-            ''' if is_activity else f'''
-            <tr>
-                <td rowspan="3" class="label-cell">사 유</td>
-                <td colspan="9" rowspan="3" class="content-cell">{row['사유']}</td>
-            </tr>
-            <tr style="display:none;"></tr><tr style="display:none;"></tr>
-            '''}
-            
-            <tr>
-                <td class="label-cell">시간</td>
-                <td colspan="9" class="content-cell">
-                    {row['시간']} ( 시 분 ~ 시 분 )
+            <tr style="height:45px;">
+                <td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold;">시간</td>
+                <td style="border:1px solid black; text-align:center; font-size:17px; letter-spacing:1px;">
+                    {row['시간'].split('(')[1].replace(')', '') if '(' in row['시간'] else row['시간']}
                 </td>
             </tr>
         </table>
+        <div style="text-align:center; margin-top:30px; font-size:18px; font-weight:bold;">상기 학생의 교내활동을 확인함.</div>
+        """
+        teacher_label = "담당교사 :"
+    else:
+        # --- [양식 1: 조퇴, 외출증] ---
+        title = "조 퇴 ,  외 출 증"
+        content_html = f"""
+        <table style="width:100%; border-collapse:collapse; border:1.5px solid black;">
+            <tr style="background-color:#E7E6E6; height:35px; border-bottom:1.5px solid black;">
+                <td colspan="2" style="text-align:center; font-size:16px; font-weight:bold; letter-spacing:2px;">
+                    {dept} 과 &nbsp;&nbsp; {grade} 학년 &nbsp;&nbsp; {cls} 반 &nbsp;&nbsp; {num} 번 &nbsp;&nbsp; 성명: {name}
+                </td>
+            </tr>
+            <tr style="height:110px;">
+                <td style="width:15%; border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:18px; letter-spacing:5px;">사유</td>
+                <td style="width:85%; border:1px solid black; padding:10px; text-align:left; vertical-align:top; font-size:17px;">{row['사유']} (행선지: {row['행선지']})</td>
+            </tr>
+            <tr style="height:45px;">
+                <td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:18px; letter-spacing:5px;">시간</td>
+                <td style="border:1px solid black; text-align:center; font-size:17px;">
+                     {row['시간'].split('(')[1].replace(')', '') if '(' in row['시간'] else row['시간']}
+                </td>
+            </tr>
+        </table>
+        <div style="text-align:center; margin-top:30px; font-size:18px; font-weight:bold;">상기 학생의 조퇴, 외출을 허가함.</div>
+        """
+        teacher_label = "담 임 :"
 
-        <div class="footer-section">
-            <p style="font-size: 16px; margin-bottom: 25px;">{confirm_text}</p>
-            <p style="font-size: 16px; letter-spacing: 5px;">20{year} 년 &nbsp;&nbsp;&nbsp;&nbsp; {month} 월 &nbsp;&nbsp;&nbsp;&nbsp; {day} 일</p>
-            
-            <div style="margin-top: 25px; font-size: 16px; text-align: right; padding-right: 50px;">
-                <span class="seal-container">
-                    {teacher_label} **오정은** (인)
-                    {f'<img src="data:image/png;base64,{seal_base64}" class="seal-img">' if seal_base64 else ''}
-                </span>
+    # 공통 하단부 (날짜, 교사, 학교명)
+    html_layout = f"""
+    <div style="width:480px; margin:0 auto; border:2px solid black; padding:0; background:white; color:black; font-family:'Malgun Gothic', 'Dotum', sans-serif;">
+        <!-- 헤더 제목 -->
+        <div style="border-bottom:1.5px solid black; background-color:#D9E1F2; padding:10px; text-align:center;">
+            <h2 style="margin:0; font-size:22px; letter-spacing:3px;">{title}</h2>
+        </div>
+        
+        <!-- 본문 내용 -->
+        <div style="padding:0px;">
+            {content_html}
+        </div>
+
+        <!-- 하단 서명 섹션 -->
+        <div style="text-align:center; padding:20px 0;">
+            <div style="font-size:18px; margin-bottom:15px; letter-spacing:2px;">
+                {year_str} 년 &nbsp;&nbsp;&nbsp; {m} 월 &nbsp;&nbsp;&nbsp; {d} 일
             </div>
-            
-            <div class="school-name">경 기 기 계 공 업 고 등 학 교</div>
+            <div style="font-size:18px; font-weight:bold; margin-bottom:20px; position:relative;">
+                {teacher_label} &nbsp;&nbsp; 오 정 은 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (인)
+                {seal_html}
+            </div>
+            <div style="border-top:1.5px solid black; padding:12px 0; font-size:22px; font-weight:bold; letter-spacing:5px;">
+                경 기 기 계 공 업 고 등 학 교
+            </div>
         </div>
     </div>
+    
+    <style>
+        @media print {{
+            header, footer, .stButton, [data-testid="stHeader"] {{ display:none !important; }}
+            .main .block-container {{ padding: 0 !important; }}
+        }}
+    </style>
     """
     
     st.markdown(html_layout, unsafe_allow_html=True)
-    # 인쇄 스크립트 실행
     components.html("<script>window.parent.print();</script>", height=0)
