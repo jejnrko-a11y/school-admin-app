@@ -136,14 +136,14 @@ def show_page(conn, user, fixed_info):
 # PART 3: 공식 양식 렌더링 함수
 # ---------------------------------------------------------
 def render_certificate(row, fixed_info):
-    # 1. 교사 직인 이미지 처리 (teacher_seal.png 로드)
+    # 1. 교사 직인 이미지 처리 (Base64 인코딩)
     seal_html = ""
     if os.path.exists("teacher_seal.png"):
         with open("teacher_seal.png", "rb") as f:
             seal_b64 = base64.b64encode(f.read()).decode()
             seal_html = f'<img src="data:image/png;base64,{seal_b64}" style="position:absolute; width:46px; margin-left:-35px; margin-top:-10px; opacity:0.8; z-index:10;">'
 
-    # 2. 데이터 정리 및 날짜 파싱
+    # 2. 데이터 정리
     dept = str(fixed_info.get('dept', '미상')).replace('.0', '')
     grade = str(fixed_info.get('grade', '0')).replace('.0', '')
     cls = str(fixed_info.get('cls', '0')).replace('.0', '')
@@ -157,88 +157,77 @@ def render_certificate(row, fixed_info):
     except:
         y, m, d = "2026", "  ", "  "
 
-    # 3. 종류별 HTML 구조 (이미지 양식 완벽 재현)
+    # 3. 종류별 테이블 내용 (들여쓰기 없이 작성)
     if row['종류'] == "교내활동증":
         title = "학 생 교 내 활 동 확 인 증"
         teacher_label = "담당교사 :"
-        content_table = f"""
-        <table style="width:100%; border-collapse:collapse; border:1.5px solid black;">
-            <tr style="background-color:#E7E6E6; height:40px; border-bottom:1.5px solid black;">
-                <td colspan="2" style="text-align:center; font-size:17px; font-weight:bold; letter-spacing:2px;">
-                    {dept} 과 &nbsp;&nbsp; {grade} 학년 &nbsp;&nbsp; {cls} 반 &nbsp;&nbsp; {num} 번 &nbsp;&nbsp; 성명: {name}
-                </td>
-            </tr>
-            <tr style="height:90px;">
-                <td style="width:18%; border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; line-height:1.3; font-size:15px;">교내<br>활동<br>사유</td>
-                <td style="width:82%; border:1px solid black; padding:10px; text-align:left; vertical-align:top; font-size:16px;">{row['사유']}</td>
-            </tr>
-            <tr style="height:50px;">
-                <td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:15px;">장소</td>
-                <td style="border:1px solid black; padding-left:15px; text-align:left; font-size:16px;">{row['행선지']}</td>
-            </tr>
-            <tr style="height:50px;">
-                <td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:15px;">시간</td>
-                <td style="border:1px solid black; text-align:center; font-size:18px; letter-spacing:1px;">
-                    {row['시간'].split('(')[1].replace(')', '') if '(' in row['시간'] else row['시간']}
-                </td>
-            </tr>
-        </table>
-        <div style="text-align:center; margin-top:35px; font-size:19px; font-weight:bold;">상기 학생의 교내활동을 확인함.</div>
-        """
+        content_table = f"""<table style="width:100%; border-collapse:collapse; border:1.5px solid black;">
+<tr style="background-color:#E7E6E6; height:40px; border-bottom:1.5px solid black;">
+<td colspan="2" style="text-align:center; font-size:17px; font-weight:bold; letter-spacing:2px;">
+{dept} 과 &nbsp;&nbsp; {grade} 학년 &nbsp;&nbsp; {cls} 반 &nbsp;&nbsp; {num} 번 &nbsp;&nbsp; 성명: {name}
+</td>
+</tr>
+<tr style="height:90px;">
+<td style="width:18%; border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; line-height:1.3; font-size:15px;">교내<br>활동<br>사유</td>
+<td style="width:82%; border:1px solid black; padding:10px; text-align:left; vertical-align:top; font-size:16px;">{row['사유']}</td>
+</tr>
+<tr style="height:50px;">
+<td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:15px;">장소</td>
+<td style="border:1px solid black; padding-left:15px; text-align:left; font-size:16px;">{row['행선지']}</td>
+</tr>
+<tr style="height:50px;">
+<td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:15px;">시간</td>
+<td style="border:1px solid black; text-align:center; font-size:18px; letter-spacing:1px;">
+{row['시간'].split('(')[1].replace(')', '') if '(' in row['시간'] else row['시간']}
+</td>
+</tr>
+</table>
+<div style="text-align:center; margin-top:35px; font-size:19px; font-weight:bold;">상기 학생의 교내활동을 확인함.</div>"""
     else:
         title = "조 퇴 ,  외 출 증"
         teacher_label = "담 임 :"
-        content_table = f"""
-        <table style="width:100%; border-collapse:collapse; border:1.5px solid black;">
-            <tr style="background-color:#E7E6E6; height:40px; border-bottom:1.5px solid black;">
-                <td colspan="2" style="text-align:center; font-size:17px; font-weight:bold; letter-spacing:2px;">
-                    {dept} 과 &nbsp;&nbsp; {grade} 학년 &nbsp;&nbsp; {cls} 반 &nbsp;&nbsp; {num} 번 &nbsp;&nbsp; 성명: {name}
-                </td>
-            </tr>
-            <tr style="height:120px;">
-                <td style="width:18%; border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:19px; letter-spacing:5px;">사유</td>
-                <td style="width:82%; border:1px solid black; padding:15px; text-align:left; vertical-align:top; font-size:18px;">
-                    {row['사유']} <br><br> <span style="font-size:15px; color:#333;">(행선지: {row['행선지']})</span>
-                </td>
-            </tr>
-            <tr style="height:50px;">
-                <td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:19px; letter-spacing:5px;">시간</td>
-                <td style="border:1px solid black; text-align:center; font-size:18px;">
-                    {row['시간'].split('(')[1].replace(')', '') if '(' in row['시간'] else row['시간']}
-                </td>
-            </tr>
-        </table>
-        <div style="text-align:center; margin-top:35px; font-size:19px; font-weight:bold;">상기 학생의 조퇴, 외출을 허가함.</div>
-        """
+        content_table = f"""<table style="width:100%; border-collapse:collapse; border:1.5px solid black;">
+<tr style="background-color:#E7E6E6; height:40px; border-bottom:1.5px solid black;">
+<td colspan="2" style="text-align:center; font-size:17px; font-weight:bold; letter-spacing:2px;">
+{dept} 과 &nbsp;&nbsp; {grade} 학년 &nbsp;&nbsp; {cls} 반 &nbsp;&nbsp; {num} 번 &nbsp;&nbsp; 성명: {name}
+</td>
+</tr>
+<tr style="height:120px;">
+<td style="width:18%; border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:19px; letter-spacing:5px;">사유</td>
+<td style="width:82%; border:1px solid black; padding:15px; text-align:left; vertical-align:top; font-size:18px;">
+{row['사유']} <br><br> <span style="font-size:15px; color:#333;">(행선지: {row['행선지']})</span>
+</td>
+</tr>
+<tr style="height:50px;">
+<td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:19px; letter-spacing:5px;">시간</td>
+<td style="border:1px solid black; text-align:center; font-size:18px;">
+{row['시간'].split('(')[1].replace(')', '') if '(' in row['시간'] else row['시간']}
+</td>
+</tr>
+</table>
+<div style="text-align:center; margin-top:35px; font-size:19px; font-weight:bold;">상기 학생의 조퇴, 외출을 허가함.</div>"""
 
-    # 4. 전체 디자인 결합
-    full_html = f"""
-    <div class="print-area" style="width:500px; margin:20px auto; border:2.5px solid black; padding:0; background:white; color:black; font-family:'Malgun Gothic', 'Dotum', sans-serif;">
-        <!-- 파란색 헤더 -->
-        <div style="border-bottom:2px solid black; background-color:#D9E1F2; padding:12px; text-align:center;">
-            <h2 style="margin:0; font-size:24px; letter-spacing:5px;">{title}</h2>
-        </div>
-        
-        <!-- 중앙 테이블 -->
-        <div style="padding:0px;">
-            {content_table}
-        </div>
-
-        <!-- 하단 섹션 -->
-        <div style="text-align:center; padding:30px 0 0 0;">
-            <div style="font-size:20px; margin-bottom:20px; letter-spacing:3px;">
-                {y} 년 &nbsp;&nbsp;&nbsp; {m} 월 &nbsp;&nbsp;&nbsp; {d} 일
-            </div>
-            <div style="font-size:20px; font-weight:bold; margin-bottom:30px; position:relative;">
-                {teacher_label} &nbsp;&nbsp; 오 정 은 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (인)
-                {seal_html}
-            </div>
-            <div style="border-top:2px solid black; padding:15px 0; font-size:25px; font-weight:bold; letter-spacing:8px; background-color:white;">
-                경 기 기 계 공 업 고 등 학 교
-            </div>
-        </div>
-    </div>
-    """
+    # 4. 전체 디자인 결합 (들여쓰기 주의)
+    full_html = f"""<div style="width:500px; margin:20px auto; border:2.5px solid black; padding:0; background:white; color:black; font-family:'Malgun Gothic', 'Dotum', sans-serif;">
+<div style="border-bottom:2px solid black; background-color:#D9E1F2; padding:12px; text-align:center;">
+<h2 style="margin:0; font-size:24px; letter-spacing:5px;">{title}</h2>
+</div>
+<div style="padding:0px;">
+{content_table}
+</div>
+<div style="text-align:center; padding:30px 0 0 0;">
+<div style="font-size:20px; margin-bottom:20px; letter-spacing:3px;">
+{y} 년 &nbsp;&nbsp;&nbsp; {m} 월 &nbsp;&nbsp;&nbsp; {d} 일
+</div>
+<div style="font-size:20px; font-weight:bold; margin-bottom:30px; position:relative;">
+{teacher_label} &nbsp;&nbsp; 오 정 은 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (인)
+{seal_html}
+</div>
+<div style="border-top:2px solid black; padding:15px 0; font-size:25px; font-weight:bold; letter-spacing:8px; background-color:white;">
+경 기 기 계 공 업 고 등 학 규
+</div>
+</div>
+</div>"""
     
     # 미리보기 렌더링
     st.markdown("### 🖨️ 증명서 미리보기")
