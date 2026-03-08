@@ -7,7 +7,7 @@ import pandas as pd
 # ==========================================
 # 1. 초기 설정 및 보안 로드
 # ==========================================
-st.set_page_config(page_title="행정 자동화 시스템", layout="centered")
+st.set_page_config(page_title="학교 생활 도우미", layout="centered")
 
 ADMIN_PASSWORD = st.secrets.get("auth", {}).get("admin_password", "0000") 
 PATHS = {"font": "NanumGothic-Regular.ttf", "bold_font": "NanumGothic-Bold.ttf", "bg": "background.png"}
@@ -105,8 +105,6 @@ else:
         if st.button("⬅️ 메인 홈 돌아가기"): 
             st.session_state.page = "메인 홈"
             st.rerun()
-    else: 
-        st.write(f"**{grade_str}학년 {cls_str}반 {user['name']}님**")
 
     # 사이드바
     with st.sidebar:
