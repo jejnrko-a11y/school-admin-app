@@ -7,7 +7,7 @@ import pandas as pd
 # ==========================================
 # 1. 초기 설정 및 보안 로드
 # ==========================================
-st.set_page_config(page_title="학교 생활 도우미", layout="centered")
+st.set_page_config(page_title="행정 자동화 시스템", layout="centered")
 
 ADMIN_PASSWORD = st.secrets.get("auth", {}).get("admin_password", "0000") 
 PATHS = {"font": "NanumGothic-Regular.ttf", "bold_font": "NanumGothic-Bold.ttf", "bg": "background.png"}
@@ -24,11 +24,11 @@ dept_str = str(FIXED_INFO['dept']).replace('.0', '')
 grade_str = str(FIXED_INFO['grade']).replace('.0', '')
 cls_str = str(FIXED_INFO['cls']).replace('.0', '')
 
-# [CSS: 상단 고정 헤더 - fixed 사용]
+# [CSS: 상단 고정 헤더 및 마커 타겟팅]
 st.markdown("""
     <style>
-    /* 상단 고정 헤더 설정 */
-    .fixed-top-header {
+    /* 1. 상단 고정 흰색 배경 바 (스크롤 시 뒤에 내용이 비치지 않게 함) */
+    .fixed-header-bg {
         position: fixed;
         top: 0;
         left: 0;
@@ -36,14 +36,25 @@ st.markdown("""
         height: 60px;
         background-color: white;
         border-bottom: 2px solid #e0e0e0;
-        z-index: 9999;
-        display: flex;
-        align-items: center;
-        padding-left: 20px;
+        z-index: 9990;
     }
-    /* 본문 콘텐츠가 헤더 아래에서 시작되도록 여백 설정 */
+    
+    /* 2. 본문 콘텐츠가 헤더에 가려지지 않도록 여백 설정 */
     [data-testid="stMainBlockContainer"] {
-        padding-top: 80px;
+        padding-top: 80px !important;
+    }
+
+    /* 3. 특정 요소(버튼/텍스트)를 상단에 고정하는 CSS 해킹 */
+    /* 마커가 포함된 컨테이너는 화면에서 숨김 */
+    div.element-container:has(.fixed-marker) {
+        display: none;
+    }
+    /* 마커 바로 다음에 렌더링되는 Streamlit 요소(버튼 등)를 헤더 위로 고정 */
+    div.element-container:has(.fixed-marker) + div.element-container {
+        position: fixed;
+        top: 13px;
+        left: 20px;
+        z-index: 9999;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -86,12 +97,17 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # [고정 헤더 렌더링]
-    st.markdown('<div class="fixed-top-header">', unsafe_allow_html=True)
+    # [고정 헤더 배경 렌더링]
+    st.markdown('<div class="fixed-header-bg"></div>', unsafe_allow_html=True)
+    
+    # [고정할 요소 바로 앞에 마커 삽입]
+    st.markdown('<div class="fixed-marker"></div>', unsafe_allow_html=True)
     if st.session_state.page != "메인 홈":
-        if st.button("⬅️ 메인 홈 돌아가기"): st.session_state.page = "메인 홈"; st.rerun()
-    else: st.write(f"&nbsp;&nbsp;**{grade_str}학년 {cls_str}반 {user['name']}님**")
-    st.markdown('</div>', unsafe_allow_html=True)
+        if st.button("⬅️ 메인 홈 돌아가기"): 
+            st.session_state.page = "메인 홈"
+            st.rerun()
+    else: 
+        st.write(f"**{grade_str}학년 {cls_str}반 {user['name']}님**")
 
     # 사이드바
     with st.sidebar:
