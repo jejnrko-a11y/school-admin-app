@@ -72,28 +72,29 @@ def show_page(conn, user):
             div[data-testid="stHeadingWithActionElements"] {
                 margin-top: 0 !important;
                 padding-top: 10px !important; 
-                margin-bottom: 0px !important; /* 위아래 여백 살짝 조정 */
+                margin-bottom: 0px !important; 
                 padding-bottom: 0 !important;
                 border: none !important;
             }
             
-            /* ★ 핵심: 인쇄할 때 네모칸(자리) 크기를 위아래로 대폭 확대 (약 130%) */
+            /* ★ 핵심: 인쇄할 때 네모칸(자리) 크기 최적화 */
             .seat-card {
                 border: 2px solid #000 !important;
                 box-shadow: none !important;
                 break-inside: avoid;
-                min-height: 115px !important; /* 기존 85px에서 115px로 높이 증가 */
+                min-height: 125px !important; /* 글자 크기에 맞춰 높이 상향 */
                 padding: 5px !important;
             }
             
-            /* ★ 핵심: 인쇄할 때 학생 이름 및 번호 글자 크기를 꽉 차게 확대 */
+            /* ★ 핵심: 인쇄할 때 학생 이름 및 번호를 2배 이상 확대 */
             .seat-name { 
-                font-size: 24px !important; /* 기존 15px에서 24px로 대폭 확대 */
-                font-weight: 900 !important; /* 글씨 굵기도 가장 두껍게 */
-                line-height: 1.3 !important;
+                font-size: 48px !important; /* 기존 24px에서 48px로 대폭 확대 */
+                font-weight: 900 !important;
+                line-height: 1.1 !important;
+                letter-spacing: -2px !important; /* 글자가 커서 겹칠 수 있으므로 자간 조정 */
             }
             .seat-x { 
-                font-size: 30px !important; /* X 표시도 함께 확대 */
+                font-size: 60px !important; /* X 표시도 함께 대폭 확대 */
             }
             
             .blackboard { border: 4px solid #000 !important; padding: 15px !important; margin-bottom: 0 !important;}
