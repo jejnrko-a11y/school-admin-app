@@ -7,7 +7,46 @@ import io
 import base64
 import requests
 import os
+import math
 
+# --- 동적 데이터 로드 함수 (새로 추가) ---
+@st.cache_data(ttl=60)
+def load_class_info(_conn):
+    """구글 시트 '반정보' 탭에서 동적으로 학급 정보를 불러옵니다."""
+    try:
+        df = _conn.read(worksheet="반정보")
+        row = df.iloc[0] # 첫 번째 행 데이터 읽기
+        return {
+            "dept": str(row.get("학과", "미상")),
+            "grade": str(row.get("학년", "0")),
+            "cls": str(row.get("반", "0")),
+            "student_count": int(row.get("학생수", 0))
+        }
+    except Exception as e:
+        return {"dept": "미상", "grade": "0", "cls": "0", "student_count": 0}
+
+@st.cache_data(ttl=60)
+def load_student_list(_conn, exclude_admins=True):
+    """구글 시트 '학생명부' 탭에서 학생 데이터를 불러옵니다.
+    exclude_admins=True일 경우 교사 및 특수 계정을 제외한 순수 학생만 반환합니다."""
+    try:
+        df = _conn.read(worksheet="학생명부")
+        
+        if exclude_admins:
+            # 특수 계정 제외 필터링
+            excludes = ['교사', '테스트계정', '관리자']
+            df = df[~df['이름'].isin(excludes)]
+            
+            # 결측치 제거 및 번호순 정렬
+            df['번호'] = pd.to_numeric(df['번호'], errors='coerce')
+            df = df.dropna(subset=['번호'])
+            df['번호'] = df['번호'].astype(int)
+            df = df.sort_values(by='번호')
+            
+        return df
+    except Exception as e:
+        return pd.DataFrame()
+        
 # 1. 한국 시간(KST) 계산 함수
 def get_kst():
     return datetime.utcnow() + timedelta(hours=9)
