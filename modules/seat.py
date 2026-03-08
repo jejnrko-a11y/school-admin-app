@@ -19,63 +19,65 @@ def show_page(conn, user):
     # --- 2. CSS 스타일 (화면용 & 인쇄용) ---
     st.markdown("""
         <style>
-        /* --- 화면 전용 디자인 --- */
+        /* --- 화면 및 모바일 전용 디자인 --- */
         .blackboard {
             background-color: #1e3d2f; color: white; border: 8px solid #5d4037;
             border-radius: 5px; padding: 20px; text-align: center;
-            font-size: 24px; font-weight: bold; margin-top: 10px; margin-bottom: 20px;
+            font-size: 24px; font-weight: bold; margin-top: 20px; margin-bottom: 20px;
         }
         .teacher-desk {
             background-color: #8d6e63; width: 120px; height: 50px;
-            margin: 30px auto 10px auto; border-radius: 5px;
+            margin: 30px auto 20px auto; border-radius: 5px;
             display: flex; align-items: center; justify-content: center;
             color: white; font-weight: bold; font-size: 14px;
         }
         .seat-card {
             background-color: #ffffff; border: 2px solid #e0e0e0;
-            border-radius: 10px; padding: 12px 5px; text-align: center;
-            margin-bottom: 15px; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+            border-radius: 10px; padding: 10px 2px; text-align: center;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
             min-height: 85px; display: flex; align-items: center; justify-content: center;
+            word-break: keep-all; /* 텍스트 중간에 줄바꿈 방지 */
         }
         .seat-name { font-weight: bold; font-size: 15px; color: #333; line-height: 1.2; }
         .seat-x { color: #ff5252; font-weight: bold; font-size: 20px; }
         .cond-label { font-size: 13px; font-weight: bold; color: #1E3A8A; margin-top: 5px; }
 
+        /* 스마트폰 화면 크기일 때 좌석 글씨와 높이를 약간 줄여서 5칸이 다 예쁘게 들어가게 조정 */
+        @media (max-width: 640px) {
+            .seat-card { min-height: 60px; padding: 5px 1px; border-radius: 6px; }
+            .seat-name { font-size: 11px; }
+        }
+
         /* --- 🖨️ 인쇄 전용(Print) 디자인 --- */
         @media print {
-            @page { size: A4 landscape; margin: 10mm; }
+            @page { size: A4 landscape; margin: 15mm; }
             
-            /* UI 요소 및 숨겨진 컨테이너들의 공백까지 완벽히 제거 */
+            /* 불필요한 UI 숨기기 */
             header, [data-testid="stSidebar"], .stButton, [data-testid="stExpander"], iframe { 
                 display: none !important; 
             }
             .sticky-marker, .fixed-header-bg { display: none !important; }
             
-            /* Streamlit의 수직 블록 간 여백(gap) 강제 제거 (공백 문제의 핵심) */
-            [data-testid="stVerticalBlock"] { gap: 0rem !important; }
-            div.element-container { margin-bottom: 0 !important; }
-            
-            /* 본문 여백 제거 및 가로 꽉 차게 */
+            /* 본문 여백 제거 */
             [data-testid="stMainBlockContainer"] {
                 padding: 0 !important;
-                padding-top: 20px !important;
                 max-width: 100% !important;
             }
             
-            /* 한 장에 들어가도록 자리 카드와 칠판의 마진/크기 축소 */
+            /* ⭐ 핵심: 제목과 좌석 사이의 빈 공백만 줄이기 위해 제목(Heading)의 아래 마진을 음수로 끌어올림 */
+            div[data-testid="stHeadingWithActionElements"] {
+                margin-bottom: -35px !important; 
+                padding-bottom: 0 !important;
+            }
+            
+            /* 좌석 간격, 교탁, 칠판 간격은 화면에서 보는 비율 그대로 유지 (겹침 문제 해결) */
             .seat-card {
                 border: 2px solid #000 !important;
                 box-shadow: none !important;
-                margin-bottom: 8px !important;
-                min-height: 70px !important; /* 높이 약간 축소 */
                 break-inside: avoid;
             }
-            .teacher-desk { margin: 15px auto 5px auto !important; }
-            .blackboard { 
-                border: 4px solid #000 !important; 
-                padding: 10px !important; 
-                margin-top: 5px !important;
-            }
+            .blackboard { border: 4px solid #000 !important; padding: 15px !important; margin-bottom: 0 !important;}
+            .teacher-desk { margin: 20px auto 15px auto !important; }
         }
         </style>
     """, unsafe_allow_html=True)
@@ -84,7 +86,6 @@ def show_page(conn, user):
     try:
         df_seat = conn.read(worksheet="자리배치", ttl=0)
         
-        # utils.py의 동적 함수 사용 (교사/테스트계정 등 자동 제외)
         df_students = load_student_list(conn, exclude_admins=True)
         all_students = [f"{row['이름']}({row['번호']}번)" for _, row in df_students.iterrows()]
         
@@ -93,7 +94,6 @@ def show_page(conn, user):
             st.warning("학생 데이터가 없습니다.")
             return
             
-        # 학생 수에 따른 행(Row) 개수 동적 계산 (가로 5분단 고정)
         columns_count = 5
         rows_count = math.ceil(total_students / columns_count)
         
@@ -133,7 +133,6 @@ def show_page(conn, user):
             cond_win = st.multiselect("🪟 창가 지정 (1분단)", all_students)
             cond_hall = st.multiselect("🚪 복도 지정 (5분단)", all_students)
 
-        # 컨트롤 버튼 영역
         c1, c2, c3 = st.columns([2, 2, 1.5])
         
         with c1:
@@ -223,7 +222,6 @@ def show_page(conn, user):
                 st.rerun()
                 
         with c3:
-            # iframe의 여백을 없애고 Streamlit 기본 버튼과 완벽하게 똑같이 보이도록 CSS 조정
             components.html("""
                 <style>
                     body { margin: 0; padding: 0; display: flex; align-items: flex-start; }
@@ -235,32 +233,16 @@ def show_page(conn, user):
                         cursor: pointer; transition: border-color 0.2s, color 0.2s;
                         display: flex; align-items: center; justify-content: center;
                     }
-                    button:hover {
-                        border-color: #ff4b4b; color: #ff4b4b;
-                    }
+                    button:hover { border-color: #ff4b4b; color: #ff4b4b; }
                 </style>
                 <button onclick="window.parent.print()">🖨️ 인쇄하기</button>
             """, height=45)
 
-    # --- 5. 시각적 출력 (자리배치 렌더링) ---
-    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True) # 위 여백
+    # --- 5. 시각적 출력 (순수 HTML Flexbox 렌더링 - 모바일 최적화) ---
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True) # 위쪽 약간의 여백
 
-    # UI 역순 렌더링: (최대 행 - 1) 부터 0행까지 거꾸로 출력 (r=0이 맨 앞/화면 하단)
+    # Streamlit 기본 Column 대신 HTML Flexbox를 써서 모바일에서도 절대 세로로 찢어지지 않게 함
     for r in range(rows_count - 1, -1, -1):
-        cols = st.columns(columns_count)
-        for c in range(columns_count):
-            try:
-                val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
-            except IndexError:
-                val = ""
-                
-            with cols[c]:
-                if val == "X":
-                    st.markdown('<div class="seat-card" style="background-color:#f0f0f0;"><div class="seat-x">X</div></div>', unsafe_allow_html=True)
-                elif val.strip() and val != "None":
-                    st.markdown(f'<div class="seat-card"><div class="seat-name">{val}</div></div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="seat-card" style="border:1px dashed #ccc;"></div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
-    st.markdown('<div class="blackboard">칠 판 (Front)</div>', unsafe_allow_html=True)
+        # 한 줄(Row) 컨테이너 생성
+        row_html = '<div style="display: flex; flex-wrap: nowrap; gap: 10px; margin-bottom: 12px; width: 100%;">'
+        for c in range(
