@@ -11,11 +11,11 @@ def show_page(conn, user):
         .blackboard {
             background-color: #1e3d2f; color: white; border: 8px solid #5d4037;
             border-radius: 5px; padding: 20px; text-align: center;
-            font-size: 24px; font-weight: bold; margin-bottom: 10px;
+            font-size: 24px; font-weight: bold; margin-top: 10px; margin-bottom: 20px;
         }
         .teacher-desk {
             background-color: #8d6e63; width: 120px; height: 50px;
-            margin: 0 auto 30px auto; border-radius: 5px;
+            margin: 30px auto 10px auto; border-radius: 5px;
             display: flex; align-items: center; justify-content: center;
             color: white; font-weight: bold; font-size: 14px;
         }
@@ -43,17 +43,23 @@ def show_page(conn, user):
         st.error(f"데이터 로드 오류: {e}")
         return
 
-    fixed_x_coords = [(2, 4), (3, 4)] # E4, E5 고정석
+    # 고정석 (기존에 설정된 뒷자리 빈 공간 등)
+    fixed_x_coords = [(2, 4), (3, 4)] # E4, E5 (3행, 4행 5분단)
 
     # --- 3. 교사 전용 조건 설정 폼 ---
-    fb_pairs = [] # 앞뒤 짝궁 리스트
-    ss_pairs = [] # 양옆 짝궁 리스트
-    cond_sep, cond_front, cond_back, cond_win, cond_hall = [], [], [], [], []
+    fb_pairs =[] # 앞뒤 짝궁 리스트
+    ss_pairs =[] # 양옆 짝궁 리스트
+    cond_sep, cond_front, cond_back, cond_win, cond_hall = [], [], [], [],[]
+    cond_fixed_br = "선택 안함"
     
     if user['name'] == "교사":
         with st.expander("⚙️ 특별 자리배치 조건 설정 (셔플 시 적용)"):
             st.info("💡 각 짝궁은 2명씩 선택해 주세요. (최대 3커플씩 가능)")
             
+            # [추가됨] 우측 맨 앞(교탁 옆) 고정 학생 지정
+            st.markdown('<p class="cond-label">🎯 교탁 옆 VIP석 (우측 맨 앞자리)</p>', unsafe_allow_html=True)
+            cond_fixed_br = st.selectbox("해당 학생은 무조건 교탁 우측(0행 4열)에 배치됩니다.", ["선택 안함"] + all_students)
+
             # 앞뒤 짝궁 (세로 인접)
             st.markdown('<p class="cond-label">↕️ 앞뒤 짝궁 지정 (세로로 인접)</p>', unsafe_allow_html=True)
             cols_fb = st.columns(3)
@@ -85,15 +91,25 @@ def show_page(conn, user):
                 with st.spinner("복합 조건을 만족하는 최적의 배치를 계산 중입니다..."):
                     for attempt in range(max_attempts):
                         shuffled = all_students.copy()
+                        
+                        # [핵심 로직] 고정석 학생을 셔플 목록에서 미리 제외
+                        if cond_fixed_br != "선택 안함" and cond_fixed_br in shuffled:
+                            shuffled.remove(cond_fixed_br)
+                        
                         random.shuffle(shuffled)
                         
                         temp_grid = [["" for _ in range(5)] for _ in range(4)]
                         s_map = {}
                         s_idx = 0
+                        
                         for r in range(4):
                             for c in range(5):
                                 if (r, c) in fixed_x_coords:
                                     temp_grid[r][c] = "X"
+                                # [핵심 로직] 0행 4열(우측 앞자리)에 고정 학생 최우선 할당
+                                elif cond_fixed_br != "선택 안함" and r == 0 and c == 4:
+                                    temp_grid[r][c] = cond_fixed_br
+                                    s_map[cond_fixed_br] = (0, 4)
                                 elif s_idx < len(shuffled):
                                     name = shuffled[s_idx]
                                     temp_grid[r][c] = name
@@ -157,10 +173,10 @@ def show_page(conn, user):
                 st.rerun()
 
     # --- 4. 시각적 출력 ---
-    st.markdown('<div class="blackboard">칠 판 (Front)</div>', unsafe_allow_html=True)
-    st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
+    st.markdown("<h4 style='text-align: center; color: #555;'>뒷자리 (Back)</h4>", unsafe_allow_html=True)
 
-    for r in range(4):
+    # [수정됨] 시각적 역순 출력: 3행(뒷자리)부터 0행(앞자리) 순으로 렌더링
+    for r in range(3, -1, -1):
         cols = st.columns(5)
         for c in range(5):
             val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
@@ -171,3 +187,7 @@ def show_page(conn, user):
                     st.markdown(f'<div class="seat-card"><div class="seat-name">{val}</div></div>', unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="seat-card" style="border:1px dashed #ccc;"></div>', unsafe_allow_html=True)
+
+    # [수정됨] 칠판과 교탁을 UI 최하단으로 이동
+    st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
+    st.markdown('<div class="blackboard">칠 판 (Front)</div>', unsafe_allow_html=True)
