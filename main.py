@@ -30,7 +30,8 @@ FIXED_INFO = load_class_info(conn)
 # 2. 로그인 페이지 (모든 사용자 포함 로드)
 # ==========================================
 def login_page():
-    st.title(f"🏫 {FIXED_INFO['dept']} 학생 인증")
+    # [수정됨] 학과, 학년, 반 정보를 모두 가져와서 타이틀에 동적으로 표시합니다.
+    st.title(f"🏫 경기기공 {FIXED_INFO['dept']} {FIXED_INFO['grade']}학년 {FIXED_INFO['cls']}반 인증")
     
     # 로그인 시에는 교사를 포함해야 하므로 exclude_admins=False
     df_all_users = load_student_list(conn, exclude_admins=False)
@@ -43,7 +44,7 @@ def login_page():
     for _, row in df_all_users.iterrows():
         name = str(row['이름']).strip()
         num_raw = str(row['번호']).replace('.0', '')
-        if num_raw == 'nan' or name in ['교사', '테스트계정', '관리자']:
+        if num_raw == 'nan' or name in['교사', '테스트계정', '관리자']:
             student_options.append(name)
         else:
             student_options.append(f"{name}({num_raw}번)")
@@ -63,7 +64,7 @@ def login_page():
                     "name": name_only, 
                     "num": 0 if str(user_data['번호']) == 'nan' else int(float(str(user_data['번호'])))
                 }
-                st.session_state.page = "홈"
+                st.session_state.page = "메인 홈"
                 st.success(f"🔓 {name_only}님 인증 성공!")
                 st.rerun()
             else:
@@ -76,14 +77,14 @@ if 'login_info' not in st.session_state:
     st.session_state.login_info = None
 
 if 'page' not in st.session_state:
-    st.session_state.page = "홈"
+    st.session_state.page = "메인 홈"
 
 if st.session_state.login_info is None:
     login_page()
 else:
     user = st.session_state.login_info
     
-    menu_list =["홈", "결석신고서 작성", "시간표", "자리배치", "비밀번호 변경"]
+    menu_list =["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
     if user['name'] in ["교사", "관리자"]:
         menu_list +=["교사용 출석체크", "교사용 결석계 확인"]
 
@@ -91,7 +92,7 @@ else:
         current_idx = menu_list.index(st.session_state.page)
     except ValueError:
         current_idx = 0
-        st.session_state.page = "홈"
+        st.session_state.page = "메인 홈"
 
     # 사이드바 
     st.sidebar.title(f"👤 {user['name']}님")
@@ -108,22 +109,22 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    if st.session_state.page != "홈":
-        if st.button("🔙 홈으로 돌아가기", use_container_width=True):
-            st.session_state.page = "홈"
+    if st.session_state.page != "메인 홈":
+        if st.button("🔙 메인 홈으로 돌아가기", use_container_width=True):
+            st.session_state.page = "메인 홈"
             st.rerun()
         st.divider()
 
     # 페이지별 라우팅
-    if st.session_state.page == "홈":
+    if st.session_state.page == "메인 홈":
         st.title(f"👋 {user['name']}님!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%H:%M')}")
         
         st.markdown("### 🚀 바로가기")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📝\n\n결석신고서 작성", use_container_width=True):
-                st.session_state.page = "결석신고서 작성"
+            if st.button("📝\n\n결석계 작성", use_container_width=True):
+                st.session_state.page = "결석계 작성"
                 st.rerun()
             if st.button("🪑\n\n자리배치", use_container_width=True):
                 st.session_state.page = "자리배치"
@@ -136,7 +137,7 @@ else:
                 st.session_state.page = "비밀번호 변경"
                 st.rerun()
         
-        if user['name'] in ["교사", "관리자"]:
+        if user['name'] in["교사", "관리자"]:
             st.markdown("---")
             st.markdown("### 👨‍🏫 교사용 행정")
             tc1, tc2 = st.columns(2)
@@ -153,7 +154,7 @@ else:
         attendance.show_page(conn)
     elif st.session_state.page == "교사용 결석계 확인":
         teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
-    elif st.session_state.page == "결석신고서 작성":
+    elif st.session_state.page == "결석계 작성":
         absence.show_page(conn, user, FIXED_INFO, PATHS)
     elif st.session_state.page == "시간표":
         timetable.show_page(conn)
