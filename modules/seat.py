@@ -245,4 +245,23 @@ def show_page(conn, user):
     for r in range(rows_count - 1, -1, -1):
         # 한 줄(Row) 컨테이너 생성
         row_html = '<div style="display: flex; flex-wrap: nowrap; gap: 10px; margin-bottom: 12px; width: 100%;">'
-        for c in range(
+        for c in range(columns_count):
+            try:
+                val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
+            except IndexError:
+                val = ""
+                
+            # 개별 자리 카드 HTML 생성 (flex: 1을 주어 5칸이 정확히 동일한 너비를 가짐)
+            if val == "X":
+                row_html += f'<div class="seat-card" style="background-color:#f0f0f0; flex: 1;"><div class="seat-x">X</div></div>'
+            elif val.strip() and val != "None":
+                row_html += f'<div class="seat-card" style="flex: 1;"><div class="seat-name">{val}</div></div>'
+            else:
+                row_html += f'<div class="seat-card" style="border:1px dashed #ccc; flex: 1;"></div>'
+        
+        row_html += '</div>'
+        # 만들어진 한 줄을 화면에 출력
+        st.markdown(row_html, unsafe_allow_html=True)
+
+    st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
+    st.markdown('<div class="blackboard">칠 판 (Front)</div>', unsafe_allow_html=True)
