@@ -7,7 +7,7 @@ import pandas as pd
 # ==========================================
 # 1. 초기 설정 및 보안 로드
 # ==========================================
-st.set_config = st.set_page_config(page_title="행정 자동화 시스템", layout="centered")
+st.set_config = st.set_page_config(page_title="학교 생활 도우미", layout="centered")
 ADMIN_PASSWORD = st.secrets.get("auth", {}).get("admin_password", "0000") 
 PATHS = {"font": "NanumGothic-Regular.ttf", "bold_font": "NanumGothic-Bold.ttf", "bg": "background.png"}
 
