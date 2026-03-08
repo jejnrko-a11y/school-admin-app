@@ -50,18 +50,27 @@ def show_page(conn, user):
         /* --- 🖨️ 인쇄 전용(Print) 디자인 --- */
         @media print {
             @page { size: A4 landscape; margin: 15mm; }
-            header, [data-testid="stSidebar"], .stButton, [data-testid="stExpander"], iframe { 
+            
+            /* 불필요한 UI 및 상단 흰색 실선(Decoration) 완벽 제거 */
+            header, [data-testid="stHeader"], [data-testid="stDecoration"], 
+            [data-testid="stSidebar"], .stButton, [data-testid="stExpander"], iframe, hr { 
                 display: none !important; 
             }
             .sticky-marker, .fixed-header-bg { display: none !important; }
+            
+            /* 상단 여백 초기화하여 제목부터 바로 나오게 처리 */
             [data-testid="stMainBlockContainer"] {
-                padding: 0 !important;
+                padding-top: 0 !important;
+                margin-top: 0 !important;
                 max-width: 100% !important;
             }
             div[data-testid="stHeadingWithActionElements"] {
+                margin-top: 0 !important;
+                padding-top: 0 !important;
                 margin-bottom: -35px !important; 
                 padding-bottom: 0 !important;
             }
+            
             .seat-card {
                 border: 2px solid #000 !important;
                 box-shadow: none !important;
@@ -70,7 +79,6 @@ def show_page(conn, user):
             .blackboard { border: 4px solid #000 !important; padding: 15px !important; margin-bottom: 0 !important;}
             .teacher-desk { margin: 20px auto 15px auto !important; }
             
-            /* 하단의 컨트롤 패널이 인쇄에 노출되지 않도록 확실히 숨김 */
             .teacher-controls { display: none !important; } 
         }
         </style>
@@ -89,6 +97,8 @@ def show_page(conn, user):
             
         columns_count = 5
         rows_count = math.ceil(total_students / columns_count)
+        total_seats = rows_count * columns_count
+        required_x_count = total_seats - total_students # 필수로 지정해야 하는 X의 개수
         
     except Exception as e:
         st.error(f"데이터 로드 오류: {e}")
@@ -97,7 +107,6 @@ def show_page(conn, user):
     # --- 4. 시각적 출력 (순수 HTML Flexbox 렌더링 - 칠판이 위로 옴) ---
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True) 
 
-    # UI 역순 렌더링: (최대 행 - 1) 부터 0행까지 거꾸로 출력
     for r in range(rows_count - 1, -1, -1):
         row_html = '<div style="display: flex; flex-wrap: nowrap; gap: 10px; margin-bottom: 12px; width: 100%;">'
         for c in range(columns_count):
@@ -120,7 +129,7 @@ def show_page(conn, user):
     st.markdown('<div class="blackboard">칠 판 (Front)</div>', unsafe_allow_html=True)
 
     # --- 5. 교사 전용 조건 설정 및 버튼 (칠판 아래로 이동) ---
-    st.markdown('<div class="teacher-controls"></div>', unsafe_allow_html=True) # 인쇄 시 숨기기 위한 마커
+    st.markdown('<div class="teacher-controls"></div>', unsafe_allow_html=True)
     
     fb_pairs = [] 
     ss_pairs = [] 
@@ -128,20 +137,17 @@ def show_page(conn, user):
     disabled_seats = [] # 사용하지 않을 X 좌석 좌표 리스트
     
     if user['name'] in ["교사", "관리자"]:
-        st.markdown("<br>", unsafe_allow_html=True) # 칠판과의 간격
+        st.markdown("<br>", unsafe_allow_html=True)
         with st.expander("⚙️ 특별 자리배치 조건 설정 (셔플 시 적용)"):
-            st.info(f"💡 현재 학생 수는 총 {total_students}명이며, 자동으로 {rows_count}줄로 배치됩니다.")
+            st.info(f"💡 전체 {total_seats}석 중 학생 수({total_students}명)를 제외한 **정확히 {required_x_count}개의 자리**를 'X'로 체크해야 합니다.")
             
-            # [새로운 기능] 사용하지 않을 좌석 (X) 지정 그리드 생성
             st.markdown('<p class="cond-label">🚫 사용하지 않을 빈 좌석(X) 선택</p>', unsafe_allow_html=True)
-            st.caption("체크된 자리는 학생이 배치되지 않고 'X' 처리됩니다. (학생 수보다 자리가 부족해지지 않도록 주의하세요)")
             
             with st.container(border=True):
                 for r in range(rows_count - 1, -1, -1):
                     cols = st.columns(columns_count)
                     for c in range(columns_count):
                         with cols[c]:
-                            # 기존에 X였던 자리는 체크박스 기본값(True) 유지
                             is_x_default = False
                             try:
                                 if str(df_seat.iloc[r, c]) == "X": is_x_default = True
@@ -174,9 +180,9 @@ def show_page(conn, user):
         
         with c1:
             if st.button("🎲 조건부 자리 바꾸기", use_container_width=True):
-                # 에러 처리: 선택한 X좌석이 너무 많아서 학생이 앉을 자리가 부족한 경우
-                if (rows_count * columns_count) - len(disabled_seats) < total_students:
-                    st.error(f"❌ 빈 좌석(X)을 너무 많이 선택했습니다! (학생 수: {total_students}명)")
+                # ★ 강제 검증: 선택한 빈자리 개수가 남는 자리수와 정확히 일치하는지 확인
+                if len(disabled_seats) != required_x_count:
+                    st.error(f"❌ 빈 좌석(X) 개수가 맞지 않습니다! (필요한 X 개수: **{required_x_count}개**, 현재 선택됨: **{len(disabled_seats)}개**)")
                 else:
                     success = False
                     max_attempts = 20000 
@@ -192,7 +198,6 @@ def show_page(conn, user):
                             
                             for r in range(rows_count):
                                 for c in range(columns_count):
-                                    # 선생님이 선택한 X 자리를 먼저 채움
                                     if (r, c) in disabled_seats:
                                         temp_grid[r][c] = "X"
                                     elif s_idx < len(shuffled):
@@ -200,8 +205,6 @@ def show_page(conn, user):
                                         temp_grid[r][c] = name
                                         s_map[name] = (r, c)
                                         s_idx += 1
-                                    else:
-                                        temp_grid[r][c] = "X"
                             
                             valid = True
                             
@@ -242,9 +245,9 @@ def show_page(conn, user):
 
         with c2:
             if st.button("🔢 번호순 배치", use_container_width=True):
-                # 번호순 배치 때도 선택된 빈자리(X)를 존중하도록 로직 추가
-                if (rows_count * columns_count) - len(disabled_seats) < total_students:
-                    st.error(f"❌ 빈 좌석(X)을 너무 많이 선택했습니다! (학생 수: {total_students}명)")
+                # ★ 번호순 배치 시에도 빈자리 개수 강제 검증
+                if len(disabled_seats) != required_x_count:
+                    st.error(f"❌ 빈 좌석(X) 개수가 맞지 않습니다! (필요한 X 개수: **{required_x_count}개**, 현재 선택됨: **{len(disabled_seats)}개**)")
                 else:
                     ordered = all_students.copy()
                     new_grid = [["" for _ in range(columns_count)] for _ in range(rows_count)]
@@ -257,8 +260,6 @@ def show_page(conn, user):
                             elif s_idx < len(ordered):
                                 new_grid[r][c] = ordered[s_idx]
                                 s_idx += 1
-                            else:
-                                new_grid[r][c] = "X"
                                 
                     new_df = pd.DataFrame(new_grid, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
                     conn.update(worksheet="자리배치", data=new_df)
