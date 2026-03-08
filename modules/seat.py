@@ -49,27 +49,31 @@ def show_page(conn, user):
 
         /* --- 🖨️ 인쇄 전용(Print) 디자인 --- */
         @media print {
-            @page { size: A4 landscape; margin: 10mm; } /* 기본 여백을 10mm로 약간 더 확보 */
+            @page { size: A4 landscape; margin: 15mm; }
             
-            /* 불필요한 UI 및 모든 종류의 구분선 완벽 제거 */
+            /* 불필요한 UI 완벽 제거 */
             header, [data-testid="stHeader"], [data-testid="stDecoration"], 
             [data-testid="stSidebar"], .stButton, [data-testid="stExpander"], iframe, hr { 
                 display: none !important; 
             }
             .sticky-marker, .fixed-header-bg { display: none !important; }
             
-            /* ★ 화면 밖으로 날아가지 않도록 안전한 px 단위 사용 & zoom으로 90% 축소 */
-            [data-testid="stMainBlockContainer"] {
-                padding: 0 !important;
-                margin-top: -40px !important; /* 위로 약 40px 정도만 안전하게 당기기 */
+            /* ★ 핵심: 짤림 현상(음수 마진)을 제거하고, zoom 속성으로 85% 안전하게 축소 */
+            .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"] {
+                border: none !important;
+                outline: none !important;
+                box-shadow: none !important;
+                background-color: transparent !important;
+                padding-top: 0 !important;
+                margin-top: 0 !important; /* 음수 마진 제거 (짤림 방지) */
                 max-width: 100% !important;
-                zoom: 0.9 !important; /* transform 대신 zoom을 써야 인쇄 레이아웃이 안 깨짐 (90%) */
+                zoom: 0.85 !important; /* 전체 크기를 85%로 축소하여 한 장에 맞춤 */
             }
             
             div[data-testid="stHeadingWithActionElements"] {
                 margin-top: 0 !important;
-                padding-top: 0 !important;
-                margin-bottom: -25px !important; /* 제목과 자리 사이 간격 조금 더 좁힘 */
+                padding-top: 10px !important; /* 제목 위쪽 여백 살짝 확보 */
+                margin-bottom: -15px !important; 
                 padding-bottom: 0 !important;
                 border: none !important;
             }
@@ -91,11 +95,18 @@ def show_page(conn, user):
     try:
         df_seat = conn.read(worksheet="자리배치", ttl="10m")
         df_students = load_student_list(conn, exclude_admins=True)
-        all_students = [f"{row['이름']}({row['번호']}번)" for _, row in df_students.iterrows()]
+        
+        # 💡 [핵심수정] 번호가 정상적인 숫자인 학생만 걸러내어 OOO(O번) 형식으로 리스트 생성
+        all_students = []
+        for _, row in df_students.iterrows():
+            num_str = str(row['번호']).replace('.0', '').strip()
+            if num_str.isdigit(): # 번호가 숫자(예: 1, 2, 3...)인 경우만 허용
+                name_str = str(row['이름']).strip()
+                all_students.append(f"{name_str}({num_str}번)")
         
         total_students = len(all_students)
         if total_students == 0:
-            st.warning("학생 데이터가 없습니다.")
+            st.warning("학생 데이터가 없습니다. (학생명부에 번호가 제대로 입력되었는지 확인해 주세요)")
             return
             
         columns_count = 5
@@ -107,7 +118,7 @@ def show_page(conn, user):
         st.error(f"데이터 로드 오류: {e}")
         return
 
-    # --- 4. 시각적 출력 (순수 HTML Flexbox 렌더링 - 칠판이 위로 옴) ---
+    # --- 4. 시각적 출력 (순수 HTML Flexbox 렌더링) ---
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True) 
 
     for r in range(rows_count - 1, -1, -1):
@@ -131,7 +142,7 @@ def show_page(conn, user):
     st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
     st.markdown('<div class="blackboard">칠 판</div>', unsafe_allow_html=True)
 
-    # --- 5. 교사 전용 조건 설정 및 버튼 (칠판 아래로 이동) ---
+    # --- 5. 교사 전용 조건 설정 및 버튼 ---
     st.markdown('<div class="teacher-controls"></div>', unsafe_allow_html=True)
     
     fb_pairs = [] 
@@ -156,7 +167,6 @@ def show_page(conn, user):
                                 if str(df_seat.iloc[r, c]) == "X": is_x_default = True
                             except: pass
                             
-                            # 체크박스의 표시 이름을 5-4-3-2-1 순서로 뒤집기
                             disp_col = columns_count - c 
                             if st.checkbox(f"{disp_col}분단 {r+1}줄", value=is_x_default, key=f"chk_x_{r}_{c}"):
                                 disabled_seats.append((r, c))
