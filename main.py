@@ -127,7 +127,7 @@ else:
     # 페이지별 라우팅
     if st.session_state.page == "메인 홈":
         # 메인 홈 타이틀 유지 (일반적인 크기)
-        st.title(f"👋 {user['name']}님!")
+        st.title(f"👋 {grade_str}학년 {cls_str}반 {user['name']}님!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%H:%M')}")
         
         st.markdown("### 🚀 바로가기")
