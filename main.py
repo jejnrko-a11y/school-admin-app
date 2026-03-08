@@ -25,7 +25,7 @@ dept_str = str(FIXED_INFO['dept']).replace('.0', '')
 grade_str = str(FIXED_INFO['grade']).replace('.0', '')
 cls_str = str(FIXED_INFO['cls']).replace('.0', '')
 
-# [CSS: Sticky 상단 고정 방식]
+# [CSS: Sticky 상단 고정 방식 및 겹침 방지]
 st.markdown("""
     <style>
     /* 1. 마커가 들어간 컨테이너는 화면에서 숨김 */
@@ -36,12 +36,15 @@ st.markdown("""
     /* 2. 마커 바로 다음 요소(버튼)를 본문 상단에 '찰싹(Sticky)' 고정 */
     div.element-container:has(.sticky-marker) + div.element-container {
         position: sticky;
-        top: 60px; /* Streamlit 기본 상단 헤더 바로 아래에 위치 */
-        z-index: 999;
-        background-color: white; /* 스크롤 시 뒤에 글자가 겹치지 않게 배경 추가 */
+        top: 60px; /* Streamlit 헤더 아래 위치 */
+        z-index: 9999; /* 가장 위에 떠 있도록 설정 */
+        background-color: white !important; /* 투명도 없는 완벽한 흰색 배경 */
+        width: 100% !important; /* ★ 가로 전체를 덮어서 옆으로 글자가 새어나오지 않게 차단 */
+        display: block !important;
         padding-top: 10px;
         padding-bottom: 10px;
-        border-bottom: 2px solid #f0f2f6; /* 디자인을 위한 옅은 구분선 */
+        border-bottom: 2px solid #f0f2f6;
+        margin-bottom: 15px; /* 고정 영역 아래에 약간의 여백 추가 */
     }
     </style>
 """, unsafe_allow_html=True)
