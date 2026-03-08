@@ -1,6 +1,6 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
-from modules import absence, teacher_admin, settings, timetable, attendance, seat
+from modules import absence, teacher_admin, settings, timetable, attendance, seat, issuance_user, issuance_admin
 from utils import get_kst, load_class_info, load_student_list
 import pandas as pd
 
@@ -109,9 +109,9 @@ else:
     # 사이드바
     with st.sidebar:
         st.title(f"👤 {user['name']}님")
-        menu_list = ["메인 홈", "시간표", "자리배치", "결석신고서 작성", "비밀번호 변경"]
+        menu_list = ["메인 홈", "시간표", "자리배치", "결석신고서 작성", "증명서 신청/내역", "비밀번호 변경"]
         if user['name'] in ["교사", "관리자"]: 
-            menu_list += ["[교사용]출석체크", "[교사용]결석계 다운로드"]
+            menu_list += ["[교사용]출석체크", "[교사용]결석계 다운로드", "[교사용]증명서 승인"]
         
         selected = st.radio("메뉴", menu_list, index=menu_list.index(st.session_state.page) if st.session_state.page in menu_list else 0)
         if selected != st.session_state.page: 
@@ -165,3 +165,7 @@ else:
         settings.show_page(conn, user)
     elif st.session_state.page == "자리배치": 
         seat.show_page(conn, user)
+    elif st.session_state.page == "증명서 신청/내역":
+        issuance_user.show_page(conn, user, FIXED_INFO)
+    elif st.session_state.page == "[교사용]증명서 승인":
+        issuance_admin.show_page(conn)
