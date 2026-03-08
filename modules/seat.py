@@ -66,34 +66,35 @@ def show_page(conn, user):
                 padding-top: 0 !important;
                 margin-top: 0 !important; 
                 max-width: 100% !important;
-                zoom: 0.85 !important; /* 전체 크기를 85%로 축소하여 한 장에 맞춤 */
+                zoom: 0.82 !important; /* 카드가 커진 만큼 한 장에 잘 들어가도록 배율 살짝 조정 */
             }
             
             div[data-testid="stHeadingWithActionElements"] {
                 margin-top: 0 !important;
                 padding-top: 10px !important; 
-                margin-bottom: 0px !important; /* 위아래 여백 살짝 조정 */
+                margin-bottom: 0px !important; 
                 padding-bottom: 0 !important;
                 border: none !important;
             }
             
-            /* ★ 핵심: 인쇄할 때 네모칸(자리) 크기를 위아래로 대폭 확대 (약 130%) */
+            /* ★ 핵심: 인쇄할 때 네모칸(자리) 크기를 위아래로 대폭 확대 (120% 이상) */
             .seat-card {
                 border: 2px solid #000 !important;
                 box-shadow: none !important;
                 break-inside: avoid;
-                min-height: 115px !important; /* 기존 85px에서 115px로 높이 증가 */
+                min-height: 145px !important; /* 115px -> 145px (위아래로 크게 확대) */
                 padding: 5px !important;
             }
             
-            /* ★ 핵심: 인쇄할 때 학생 이름 및 번호 글자 크기를 꽉 차게 확대 */
+            /* ★ 핵심: 인쇄할 때 학생 이름 및 번호 글자 크기를 약 2배로 꽉 차게 확대 */
             .seat-name { 
-                font-size: 24px !important; /* 기존 15px에서 24px로 대폭 확대 */
-                font-weight: 900 !important; /* 글씨 굵기도 가장 두껍게 */
+                font-size: 34px !important; /* 폰트 크기 2배 뻥튀기 */
+                font-weight: 900 !important; 
                 line-height: 1.3 !important;
+                letter-spacing: -1px !important; /* 이름이 길어도 줄바꿈 안 되게 자간 살짝 축소 */
             }
             .seat-x { 
-                font-size: 30px !important; /* X 표시도 함께 확대 */
+                font-size: 45px !important; /* X 표시도 거대하게 */
             }
             
             .blackboard { border: 4px solid #000 !important; padding: 15px !important; margin-bottom: 0 !important;}
@@ -106,9 +107,9 @@ def show_page(conn, user):
 
     # --- 3. 동적 데이터 로드 및 그리드 계산 ---
     try:
-        df_seat = conn.read(worksheet="자리배치", ttl="10m")
         df_students = load_student_list(conn, exclude_admins=True)
         
+        # 번호가 정상적인 숫자인 학생만 걸러내어 OOO(O번) 형식으로 리스트 생성
         all_students = []
         for _, row in df_students.iterrows():
             num_str = str(row['번호']).replace('.0', '').strip()
@@ -126,6 +127,17 @@ def show_page(conn, user):
         total_seats = rows_count * columns_count
         required_x_count = total_seats - total_students
         
+        # 💡 [핵심수정] '자리배치' 시트가 구글 시트에서 삭제되었을 경우를 완벽 대비하는 로직
+        try:
+            df_seat = conn.read(worksheet="자리배치", ttl="10m")
+            # 시트가 비워져있거나 구조가 깨졌을 때도 예외 처리로 던짐
+            if df_seat.empty or len(df_seat.columns) != columns_count:
+                raise ValueError("Sheet is broken or empty")
+        except Exception:
+            # 시트가 삭제되었거나 오류가 발생하면 코드를 멈추지 않고 빈 가상 데이터프레임 생성
+            empty_grid = [["" for _ in range(columns_count)] for _ in range(rows_count)]
+            df_seat = pd.DataFrame(empty_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
+            
     except Exception as e:
         st.error(f"데이터 로드 오류: {e}")
         return
