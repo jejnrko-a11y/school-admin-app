@@ -37,7 +37,7 @@ def login_page():
     
     #[수정됨] st.title 대신 HTML 태그를 사용해 폰트 사이즈를 기존의 70% 수준(약 1.8rem)으로 줄였습니다.
     st.markdown(
-        f"<h1 style='font-size: 1.8rem; margin-bottom: 15px;'>🏫 경기기공 {dept_str} {grade_str}학년 {cls_str}반 인증</h1>", 
+        f"<h1 style='font-size: 1.8rem; margin-bottom: 18px;'>🏫 경기기계공업고 {dept_str} {grade_str}학년 {cls_str}반 인증</h1>", 
         unsafe_allow_html=True
     )
     
