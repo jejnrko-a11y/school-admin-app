@@ -1,23 +1,24 @@
-import streamlit as st
+import streamlit st
 import pandas as pd
 import random
 
 def show_page(conn, user):
     st.title("🪑 지능형 조건부 자리배치")
 
-    # --- 1. CSS 스타일 ---
+    # --- 1. CSS 스타일 (칠판 하단 배치를 위한 마진 조정 포함) ---
     st.markdown("""
         <style>
         .blackboard {
             background-color: #1e3d2f; color: white; border: 8px solid #5d4037;
             border-radius: 5px; padding: 20px; text-align: center;
-            font-size: 24px; font-weight: bold; margin-bottom: 10px;
+            font-size: 24px; font-weight: bold; margin-top: 20px;
         }
         .teacher-desk {
             background-color: #8d6e63; width: 120px; height: 50px;
-            margin: 0 auto 30px auto; border-radius: 5px;
+            margin: 30px auto 10px auto; border-radius: 5px;
             display: flex; align-items: center; justify-content: center;
             color: white; font-weight: bold; font-size: 14px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
         .seat-card {
             background-color: #ffffff; border: 2px solid #e0e0e0;
@@ -82,7 +83,7 @@ def show_page(conn, user):
                 success = False
                 max_attempts = 20000 
                 
-                with st.spinner("복합 조건을 만족하는 최적의 배치를 계산 중입니다..."):
+                with st.spinner("최적의 배치를 계산 중입니다..."):
                     for attempt in range(max_attempts):
                         shuffled = all_students.copy()
                         random.shuffle(shuffled)
@@ -90,6 +91,7 @@ def show_page(conn, user):
                         temp_grid = [["" for _ in range(5)] for _ in range(4)]
                         s_map = {}
                         s_idx = 0
+                        # 데이터 저장은 기존처럼 0행(앞자리) -> 3행(뒷자리) 순서로 수행
                         for r in range(4):
                             for c in range(5):
                                 if (r, c) in fixed_x_coords:
@@ -101,21 +103,15 @@ def show_page(conn, user):
                                     s_idx += 1
                         
                         valid = True
-                        
-                        # 검증 1: 앞뒤 짝궁 (같은 열, 행 차이 1)
                         for p in fb_pairs:
                             pos1, pos2 = s_map[p[0]], s_map[p[1]]
                             if not (pos1[1] == pos2[1] and abs(pos1[0] - pos2[0]) == 1):
                                 valid = False; break
-                        
-                        # 검증 2: 양옆 짝궁 (같은 행, 열 차이 1)
                         if valid:
                             for p in ss_pairs:
                                 pos1, pos2 = s_map[p[0]], s_map[p[1]]
                                 if not (pos1[0] == pos2[0] and abs(pos1[1] - pos2[1]) == 1):
                                     valid = False; break
-
-                        # 검증 3: 분리 (상하좌우 인접 불가)
                         if valid and cond_sep and len(cond_sep) > 1:
                             for i in range(len(cond_sep)):
                                 for j in range(i + 1, len(cond_sep)):
@@ -123,8 +119,6 @@ def show_page(conn, user):
                                     if abs(p1[0]-p2[0]) + abs(p1[1]-p2[1]) == 1:
                                         valid = False; break
                                 if not valid: break
-
-                        # 나머지 조건 검증
                         if valid and cond_front and any(s_map[n][0] != 0 for n in cond_front): valid = False
                         if valid and cond_back and any(s_map[n][0] != 3 for n in cond_back): valid = False
                         if valid and cond_win and any(s_map[n][1] != 0 for n in cond_win): valid = False
@@ -136,16 +130,17 @@ def show_page(conn, user):
                             success = True; break
                 
                 if success:
-                    st.toast("✅ 모든 커플 및 배치 조건을 만족합니다!")
+                    st.toast("✅ 배치를 찾았습니다!")
                     st.rerun()
                 else:
-                    st.error("❌ 조건이 너무 복잡하여 배치를 찾지 못했습니다. 커플 수를 줄이거나 조건을 완화해 주세요.")
+                    st.error("❌ 조건을 만족하는 배치를 찾지 못했습니다.")
 
         with c2:
             if st.button("🔢 번호순(1분단부터)", use_container_width=True):
                 ordered = all_students.copy()
                 new_grid = [["" for _ in range(5)] for _ in range(4)]
                 s_idx = 0
+                # 1분단(c=0)부터 아래(r=0, 앞자리)에서 위(r=3, 뒷자리) 순으로 채움
                 for c in range(5):
                     for r in range(4):
                         if (r, c) in fixed_x_coords: new_grid[r][c] = "X"
@@ -156,11 +151,9 @@ def show_page(conn, user):
                 conn.update(worksheet="자리배치", data=new_df)
                 st.rerun()
 
-    # --- 4. 시각적 출력 ---
-    st.markdown('<div class="blackboard">칠 판 (Front)</div>', unsafe_allow_html=True)
-    st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
-
-    for r in range(4):
+    # --- 4. 시각적 출력 (교실 뒷편 시점) ---
+    # 학생 자리 출력: 4열(뒷자리)부터 1열(앞자리) 순으로 출력하여 화면 하단이 칠판이 되도록 함
+    for r in reversed(range(4)):
         cols = st.columns(5)
         for c in range(5):
             val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
@@ -171,3 +164,9 @@ def show_page(conn, user):
                     st.markdown(f'<div class="seat-card"><div class="seat-name">{val}</div></div>', unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="seat-card" style="border:1px dashed #ccc;"></div>', unsafe_allow_html=True)
+
+    # 교탁과 칠판을 학생 자리 아래에 배치
+    st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
+    st.markdown('<div class="blackboard">칠 판 (앞)</div>', unsafe_allow_html=True)
+    
+    st.info("💡 위 화면은 교실 뒷편에서 앞쪽(칠판)을 바라보는 시점입니다. (하단이 앞자리)")
