@@ -133,7 +133,7 @@ def show_page(conn, user):
         st.markdown(row_html, unsafe_allow_html=True)
 
     st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
-    st.markdown('<div class="blackboard">칠 판 (Front)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="blackboard">칠 판</div>', unsafe_allow_html=True)
 
     # --- 5. 교사 전용 조건 설정 및 버튼 (칠판 아래로 이동) ---
     st.markdown('<div class="teacher-controls"></div>', unsafe_allow_html=True)
@@ -145,7 +145,7 @@ def show_page(conn, user):
     
     if user['name'] in ["교사", "관리자"]:
         st.markdown("<br>", unsafe_allow_html=True)
-        with st.expander("⚙️ 특별 자리배치 조건 설정 (셔플 시 적용)"):
+        with st.expander("⚙️ 조건 설정"):
             st.info(f"💡 전체 {total_seats}석 중 학생 수({total_students}명)를 제외한 **정확히 {required_x_count}개의 자리**를 'X'로 체크해야 합니다.")
             
             st.markdown('<p class="cond-label">🚫 사용하지 않을 빈 좌석(X) 선택</p>', unsafe_allow_html=True)
@@ -186,7 +186,7 @@ def show_page(conn, user):
         c1, c2, c3 = st.columns([2, 2, 1.5])
         
         with c1:
-            if st.button("🎲 조건부 자리 바꾸기", use_container_width=True):
+            if st.button("🎲 자리 셔플", use_container_width=True):
                 if len(disabled_seats) != required_x_count:
                     st.error(f"❌ 빈 좌석(X) 개수가 맞지 않습니다! (필요한 X 개수: **{required_x_count}개**, 현재 선택됨: **{len(disabled_seats)}개**)")
                 else:
