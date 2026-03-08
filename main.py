@@ -139,16 +139,16 @@ else:
             st.session_state.page = "결석신고서 작성"; st.rerun()
         
         c4, c5, c6 = st.columns(3)
-        if c4.button("📜 증명서 신청", use_container_width=True): 
+        if c4.button("📜 조퇴/외출/교내활동증 신청", use_container_width=True): 
             st.session_state.page = "조퇴/외출/교내활동증 신청"; st.rerun()
         if c5.button("🔐 비밀번호 변경", use_container_width=True): 
             st.session_state.page = "비밀번호 변경"; st.rerun()
         # c6는 디자인 정렬을 위해 비워둠 (필요 시 추가 가능)
 
-        # 👨‍🏫 교사용 행정 (교사/관리자 전용)
+        # 👨‍🏫 교사용 (교사/관리자 전용)
         if user['name'] in ["교사", "관리자"]:
             st.markdown("---")
-            st.markdown("### 👨‍🏫 교사용 행정")
+            st.markdown("### 👨‍🏫 교사용")
             tc1, tc2, tc3 = st.columns(3)
             if tc1.button("🚩 출석체크", use_container_width=True): 
                 st.session_state.page = "[교사용]출석체크"; st.rerun()
