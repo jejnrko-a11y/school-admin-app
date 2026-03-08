@@ -16,7 +16,8 @@ PATHS = {"font": "NanumGothic-Regular.ttf", "bold_font": "NanumGothic-Bold.ttf",
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error(f"데이터베이스 연결 실패: {e}"); st.stop()
+    st.error(f"데이터베이스 연결 실패: {e}")
+    st.stop()
 
 # 동적 학급 정보 로드
 FIXED_INFO = load_class_info(conn)
@@ -24,37 +25,23 @@ dept_str = str(FIXED_INFO['dept']).replace('.0', '')
 grade_str = str(FIXED_INFO['grade']).replace('.0', '')
 cls_str = str(FIXED_INFO['cls']).replace('.0', '')
 
-# [CSS: 상단 고정 헤더 및 마커 타겟팅]
+# [CSS: Sticky 상단 고정 방식]
 st.markdown("""
     <style>
-    /* 1. 상단 고정 흰색 배경 바 (스크롤 시 뒤에 내용이 비치지 않게 함) */
-    .fixed-header-bg {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 60px;
-        background-color: white;
-        border-bottom: 2px solid #e0e0e0;
-        z-index: 9990;
-    }
-    
-    /* 2. 본문 콘텐츠가 헤더에 가려지지 않도록 여백 설정 */
-    [data-testid="stMainBlockContainer"] {
-        padding-top: 80px !important;
-    }
-
-    /* 3. 특정 요소(버튼/텍스트)를 상단에 고정하는 CSS 해킹 */
-    /* 마커가 포함된 컨테이너는 화면에서 숨김 */
-    div.element-container:has(.fixed-marker) {
+    /* 1. 마커가 들어간 컨테이너는 화면에서 숨김 */
+    div.element-container:has(.sticky-marker) {
         display: none;
     }
-    /* 마커 바로 다음에 렌더링되는 Streamlit 요소(버튼 등)를 헤더 위로 고정 */
-    div.element-container:has(.fixed-marker) + div.element-container {
-        position: fixed;
-        top: 13px;
-        left: 20px;
-        z-index: 9999;
+    
+    /* 2. 마커 바로 다음 요소(버튼)를 본문 상단에 '찰싹(Sticky)' 고정 */
+    div.element-container:has(.sticky-marker) + div.element-container {
+        position: sticky;
+        top: 60px; /* Streamlit 기본 상단 헤더 바로 아래에 위치 */
+        z-index: 999;
+        background-color: white; /* 스크롤 시 뒤에 글자가 겹치지 않게 배경 추가 */
+        padding-top: 10px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #f0f2f6; /* 디자인을 위한 옅은 구분선 */
     }
     </style>
 """, unsafe_allow_html=True)
@@ -66,14 +53,18 @@ def login_page():
     st.markdown(f"<h1 style='font-size: 1.8rem; margin-bottom: 18px;'>🏫 경기기계공업고 {dept_str} {grade_str}학년 {cls_str}반 인증</h1>", unsafe_allow_html=True)
     df_all_users = load_student_list(conn, exclude_admins=False)
     
-    if df_all_users.empty: st.error("⚠️ 학생 명부를 불러오지 못했습니다."); return
+    if df_all_users.empty: 
+        st.error("⚠️ 학생 명부를 불러오지 못했습니다.")
+        return
 
     student_options = []
     for _, row in df_all_users.iterrows():
         name = str(row['이름']).strip()
         num_raw = str(row['번호']).replace('.0', '')
-        if num_raw == 'nan' or name in ['교사', '테스트계정', '관리자']: student_options.append(name)
-        else: student_options.append(f"{name}({num_raw}번)")
+        if num_raw == 'nan' or name in ['교사', '테스트계정', '관리자']: 
+            student_options.append(name)
+        else: 
+            student_options.append(f"{name}({num_raw}번)")
     
     with st.container(border=True):
         selected_user = st.selectbox("본인의 이름을 선택하세요", student_options)
@@ -82,27 +73,32 @@ def login_page():
             user_data = df_all_users[df_all_users['이름'] == selected_user.split("(")[0]].iloc[0]
             db_pw = str(user_data['비밀번호']).strip().split('.')[0]
             if str(pw_input).strip() == db_pw:
-                st.session_state.login_info = {"name": selected_user.split("(")[0], "num": 0 if str(user_data['번호']) == 'nan' else int(float(str(user_data['번호'])))}
-                st.session_state.page = "메인 홈"; st.rerun()
-            else: st.error("비밀번호가 틀렸습니다.")
+                st.session_state.login_info = {
+                    "name": selected_user.split("(")[0], 
+                    "num": 0 if str(user_data['번호']) == 'nan' else int(float(str(user_data['번호'])))
+                }
+                st.session_state.page = "메인 홈"
+                st.rerun()
+            else: 
+                st.error("비밀번호가 틀렸습니다.")
 
 # ==========================================
 # 3. 메인 로직 및 페이지 라우팅
 # ==========================================
-if 'login_info' not in st.session_state: st.session_state.login_info = None
-if 'page' not in st.session_state: st.session_state.page = "메인 홈"
+if 'login_info' not in st.session_state: 
+    st.session_state.login_info = None
+if 'page' not in st.session_state: 
+    st.session_state.page = "메인 홈"
 
 if st.session_state.login_info is None:
     login_page()
 else:
     user = st.session_state.login_info
     
-    # [고정 헤더 배경 렌더링]
-    st.markdown('<div class="fixed-header-bg"></div>', unsafe_allow_html=True)
-    
-    # [고정할 요소 바로 앞에 마커 삽입]
-    st.markdown('<div class="fixed-marker"></div>', unsafe_allow_html=True)
+    # [상단 고정 버튼 렌더링]
     if st.session_state.page != "메인 홈":
+        # 고정시킬 버튼 바로 위에 sticky 마커 삽입
+        st.markdown('<div class="sticky-marker"></div>', unsafe_allow_html=True)
         if st.button("⬅️ 메인 홈 돌아가기"): 
             st.session_state.page = "메인 홈"
             st.rerun()
@@ -113,11 +109,17 @@ else:
     with st.sidebar:
         st.title(f"👤 {user['name']}님")
         menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
-        if user['name'] in ["교사", "관리자"]: menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
+        if user['name'] in ["교사", "관리자"]: 
+            menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
         
         selected = st.radio("메뉴", menu_list, index=menu_list.index(st.session_state.page) if st.session_state.page in menu_list else 0)
-        if selected != st.session_state.page: st.session_state.page = selected; st.rerun()
-        if st.button("로그아웃", use_container_width=True): st.session_state.clear(); st.rerun()
+        if selected != st.session_state.page: 
+            st.session_state.page = selected
+            st.rerun()
+            
+        if st.button("로그아웃", use_container_width=True): 
+            st.session_state.clear()
+            st.rerun()
 
     # 페이지 라우팅
     if st.session_state.page == "메인 홈":
@@ -127,19 +129,38 @@ else:
         
         st.markdown("### 🚀 바로가기")
         c1, c2 = st.columns(2)
-        if c1.button("📝 결석계 작성", use_container_width=True): st.session_state.page="결석계 작성"; st.rerun()
-        if c1.button("🪑 자리배치", use_container_width=True): st.session_state.page="자리배치"; st.rerun()
-        if c2.button("📅 시간표", use_container_width=True): st.session_state.page="시간표"; st.rerun()
-        if c2.button("🔐 비밀번호 변경", use_container_width=True): st.session_state.page="비밀번호 변경"; st.rerun()
+        if c1.button("📝 결석계 작성", use_container_width=True): 
+            st.session_state.page = "결석계 작성"
+            st.rerun()
+        if c1.button("🪑 자리배치", use_container_width=True): 
+            st.session_state.page = "자리배치"
+            st.rerun()
+        if c2.button("📅 시간표", use_container_width=True): 
+            st.session_state.page = "시간표"
+            st.rerun()
+        if c2.button("🔐 비밀번호 변경", use_container_width=True): 
+            st.session_state.page = "비밀번호 변경"
+            st.rerun()
         
         if user['name'] in ["교사", "관리자"]:
-            st.markdown("---"); st.markdown("### 👨‍🏫 교사용 행정")
-            if st.button("🚩 출석체크", use_container_width=True): st.session_state.page="교사용 출석체크"; st.rerun()
-            if st.button("📁 결석계 확인", use_container_width=True): st.session_state.page="교사용 결석계 확인"; st.rerun()
+            st.markdown("---")
+            st.markdown("### 👨‍🏫 교사용 행정")
+            if st.button("🚩 출석체크", use_container_width=True): 
+                st.session_state.page = "교사용 출석체크"
+                st.rerun()
+            if st.button("📁 결석계 확인", use_container_width=True): 
+                st.session_state.page = "교사용 결석계 확인"
+                st.rerun()
 
-    elif st.session_state.page == "교사용 출석체크": attendance.show_page(conn)
-    elif st.session_state.page == "교사용 결석계 확인": teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
-    elif st.session_state.page == "결석계 작성": absence.show_page(conn, user, FIXED_INFO, PATHS)
-    elif st.session_state.page == "시간표": timetable.show_page(conn)
-    elif st.session_state.page == "비밀번호 변경": settings.show_page(conn, user)
-    elif st.session_state.page == "자리배치": seat.show_page(conn, user)
+    elif st.session_state.page == "교사용 출석체크": 
+        attendance.show_page(conn)
+    elif st.session_state.page == "교사용 결석계 확인": 
+        teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
+    elif st.session_state.page == "결석계 작성": 
+        absence.show_page(conn, user, FIXED_INFO, PATHS)
+    elif st.session_state.page == "시간표": 
+        timetable.show_page(conn)
+    elif st.session_state.page == "비밀번호 변경": 
+        settings.show_page(conn, user)
+    elif st.session_state.page == "자리배치": 
+        seat.show_page(conn, user)
