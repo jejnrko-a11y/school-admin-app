@@ -45,7 +45,7 @@ def show_page(conn):
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("🤖 스마트 서류 크로스체크")
+    st.title("🤖 출석체크")
     st.info("특이사항을 기록하면 학생들이 제출한 결석계와 대조하여 서류 제출 여부를 실시간 판별합니다.")
 
     # 2. 데이터 로드
@@ -67,7 +67,7 @@ def show_page(conn):
     # ---------------------------------------------------------
     # PART 1: 특이사항 학생 추가 (요일별 자동 감지 로직)
     # ---------------------------------------------------------
-    st.subheader("➕ 특이사항 기록 추가")
+    st.subheader("➕ 기록 추가")
 
     if 'prev_date' not in st.session_state:
         st.session_state.prev_date = get_kst().date()
@@ -132,7 +132,7 @@ def show_page(conn):
     # ---------------------------------------------------------
     # PART 2: 월별 서류 대조 현황 (모바일 최적화 및 인쇄)
     # ---------------------------------------------------------
-    st.subheader("📋 월별 서류 대조 현황")
+    st.subheader("📋 월별 서류 현황")
 
     if df_special.empty:
         st.info("기록된 특이사항이 없습니다.")
