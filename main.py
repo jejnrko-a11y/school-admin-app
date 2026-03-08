@@ -149,7 +149,7 @@ else:
             if st.button("🚩 출석체크", use_container_width=True): 
                 st.session_state.page = "[교사용]출석체크"
                 st.rerun()
-            if st.button("📁 결석계 확인", use_container_width=True): 
+            if st.button("📁 결석계 다운로드", use_container_width=True): 
                 st.session_state.page = "[교사용]결석계 다운로드"
                 st.rerun()
 
