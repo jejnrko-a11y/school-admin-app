@@ -4,10 +4,10 @@ import random
 import streamlit.components.v1 as components
 
 def show_page(conn, user):
-    # --- 1. CSS 스타일 (상단 여백 제거 및 요소 간격 최적화) ---
+    # --- 1. CSS 스타일 (시간표 스타일 상속 및 왼쪽 정렬) ---
     st.markdown("""
         <style>
-        /* 웹 화면 상단 여백 제거 및 기본 선 숨기기 */
+        /* 웹 화면 상단 여백 및 기본 요소 제거 */
         .block-container {
             padding-top: 1rem !important;
             padding-bottom: 0rem !important;
@@ -17,15 +17,39 @@ def show_page(conn, user):
         }
         hr { display: none !important; }
 
-        /* [제목] 최상단 배치용 스타일 */
-        .main-title {
-            font-size: 28px;
-            font-weight: bold;
-            text-align: center;
-            margin-top: 0px !important;
+        /* [제목 스타일] 시간표 코드 참고: 왼쪽 정렬 및 크기 조절 */
+        .title-container {
+            text-align: left !important;
             margin-bottom: 20px !important;
+        }
+        .main-title {
+            font-size: 2.2rem; /* st.title 크기 */
+            font-weight: 700;
             color: #1a1a1a;
-            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+        .sub-title {
+            font-size: 1.5rem; /* ### 마크다운 크기 */
+            font-weight: 600;
+            color: #31333F;
+            margin-bottom: 1rem;
+        }
+
+        /* [메인 홈 버튼] Sticky 네비게이션 스타일 */
+        .sticky-wrapper {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background-color: white;
+            padding: 5px 0 15px 0;
+        }
+        div.stButton > button:first-child {
+            background-color: #1E3A8A !important;
+            color: white !important;
+            font-weight: bold !important;
+            border: 1px solid #002D62 !important;
+            border-radius: 8px !important;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2) !important;
         }
 
         /* 좌석 그리드 */
@@ -54,60 +78,61 @@ def show_page(conn, user):
         /* 하단 요소 (교탁, 칠판) */
         .teacher-desk {
             background-color: #8d6e63 !important; 
-            width: 70px; 
-            height: 25px;
+            width: 70px; height: 25px;
             margin: 10px auto 5px auto !important;
             border-radius: 3px;
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-            color: white !important; 
-            font-weight: bold; 
-            font-size: 11px;
+            display: flex; align-items: center; justify-content: center;
+            color: white !important; font-weight: bold; font-size: 11px;
             -webkit-print-color-adjust: exact;
         }
         .blackboard {
             background-color: #1e3d2f !important; 
             color: white !important; 
             border: 4px solid #5d4037;
-            border-radius: 4px; 
-            padding: 8px; 
-            text-align: center;
-            font-size: 18px; 
-            font-weight: bold; 
-            margin-top: 0px !important;
+            border-radius: 4px; padding: 8px; 
+            text-align: center; font-size: 18px; font-weight: bold;
             -webkit-print-color-adjust: exact;
         }
 
         /* [인쇄 설정] */
         @media print {
             @page { size: A4 landscape; margin: 8mm; }
-            
-            /* 메뉴, 버튼, 설정창 등 인쇄에서 완전 제외 */
             header, footer, .stSidebar, .stButton, .stExpander, .stAlert, 
-            [data-testid="stHeader"], [data-testid="stDecoration"], 
-            [data-testid="stTitleBlock"], hr {
+            [data-testid="stHeader"], [data-testid="stDecoration"], .sticky-wrapper {
                 display: none !important;
             }
-            
             .main .block-container { padding: 0 !important; margin: 0 !important; }
             .print-area { display: block !important; width: 100% !important; }
-
-            /* 인쇄 시 제목 및 카드 크기 조정 */
-            .main-title { font-size: 26px !important; margin-bottom: 15px !important; }
+            .title-container { display: block !important; text-align: left !important; }
+            .main-title { font-size: 24px !important; }
+            .sub-title { font-size: 18px !important; }
             .seat-container { border: 1.5px solid #000 !important; min-height: 80px !important; }
             .seat-name { font-size: 16px !important; }
-            .teacher-desk { margin: 10px auto !important; height: 35px !important; font-size: 14px !important; }
-            .blackboard { padding: 15px !important; font-size: 24px !important; }
+            .teacher-desk { height: 35px !important; font-size: 14px !important; }
+            .blackboard { font-size: 24px !important; }
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # --- 2. 최상단 제목 표시 ---
-    # st.title() 대신 HTML을 사용하여 최상단에 고정
-    st.markdown('<div class="main-title">💡 컴퓨터전자 3-2반 자리배치</div>', unsafe_allow_html=True)
+    # --- 2. [홈 버튼] (최상단 고정) ---
+    st.markdown('<div class="sticky-wrapper">', unsafe_allow_html=True)
+    if st.button("🔙 메인 홈으로 돌아가기", use_container_width=True):
+        st.session_state.page = "메인 홈"
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- 3. 데이터 로드 ---
+    # --- 3. [인쇄 영역 시작: 제목 포함] ---
+    st.markdown('<div class="print-area">', unsafe_allow_html=True)
+    
+    # 시간표 디자인 참고: 왼쪽 정렬된 제목과 부제목
+    st.markdown("""
+        <div class="title-container">
+            <div class="main-title">🪑 학급 자리배치</div>
+            <div class="sub-title">3학년 2반 (컴퓨터전자과)</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # 데이터 로드
     try:
         df_seat = conn.read(worksheet="자리배치", ttl=0)
         df_students = conn.read(worksheet="학생명부", ttl=0)
@@ -121,22 +146,19 @@ def show_page(conn, user):
 
     fixed_x_coords = [(0, 0), (1, 0)] # 5분단 뒷자리 X
 
-    # --- 4. 교사용 관리 도구 (웹 전용) ---
+    # --- 4. 교사용 관리 도구 (인쇄 시 숨김 처리됨) ---
     if user['name'] == "교사":
         with st.expander("⚙️ 조건 설정"):
             st.info("💡 오른쪽(1분단)이 창가, 왼쪽(5분단)이 복도입니다.")
-            
             fb_pairs, ss_pairs = [], []
             col_fb = st.columns(3)
             for i in range(3):
                 p = col_fb[i].multiselect(f"앞뒤 커플 {i+1}", all_students, max_selections=2, key=f"fb_{i}")
                 if len(p) == 2: fb_pairs.append(p)
-            
             col_ss = st.columns(3)
             for i in range(3):
                 p = col_ss[i].multiselect(f"양옆 커플 {i+1}", all_students, max_selections=2, key=f"ss_{i}")
                 if len(p) == 2: ss_pairs.append(p)
-
             cond_sep = st.multiselect("💢 분리 지정", all_students)
             cond_front = st.multiselect("📏 앞자리 (1열)", all_students)
             cond_back = st.multiselect("📺 뒷자리 (4열)", all_students)
@@ -147,42 +169,36 @@ def show_page(conn, user):
         with c1:
             if st.button("🎲 자리 셔플", use_container_width=True):
                 success = False
-                with st.spinner("계산 중..."):
-                    for _ in range(20000):
-                        shuff = all_students.copy()
-                        random.shuffle(shuff)
-                        grid = [["" for _ in range(5)] for _ in range(4)]
-                        s_map = {}
-                        s_idx = 0
-                        for r in range(4):
-                            for c in range(5):
-                                if (r, c) in fixed_x_coords: grid[r][c] = "X"
-                                elif s_idx < len(shuff):
-                                    name = shuff[s_idx]; grid[r][c] = name
-                                    s_map[name] = (r, c); s_idx += 1
-                        valid = True
-                        for p in fb_pairs:
+                for _ in range(20000):
+                    shuff = all_students.copy(); random.shuffle(shuff)
+                    grid = [["" for _ in range(5)] for _ in range(4)]
+                    s_map, s_idx = {}, 0
+                    for r in range(4):
+                        for c in range(5):
+                            if (r, c) in fixed_x_coords: grid[r][c] = "X"
+                            elif s_idx < len(shuff):
+                                name = shuff[s_idx]; grid[r][c] = name; s_map[name] = (r, c); s_idx += 1
+                    valid = True
+                    for p in fb_pairs:
+                        p1, p2 = s_map[p[0]], s_map[p[1]]
+                        if not (p1[1] == p2[1] and abs(p1[0]-p2[0]) == 1): valid = False; break
+                    if valid:
+                        for p in ss_pairs:
                             p1, p2 = s_map[p[0]], s_map[p[1]]
-                            if not (p1[1] == p2[1] and abs(p1[0]-p2[0]) == 1): valid = False; break
-                        if valid:
-                            for p in ss_pairs:
-                                p1, p2 = s_map[p[0]], s_map[p[1]]
-                                if not (p1[0] == p2[0] and abs(p1[1]-p2[1]) == 1): valid = False; break
-                        if valid and cond_sep:
-                            for i in range(len(cond_sep)):
-                                for j in range(i+1, len(cond_sep)):
-                                    p1, p2 = s_map[cond_sep[i]], s_map[cond_sep[j]]
-                                    if abs(p1[0]-p2[0]) + abs(p1[1]-p2[1]) == 1: valid = False; break
-                        if valid and cond_front and any(s_map[n][0] != 3 for n in cond_front): valid = False
-                        if valid and cond_back and any(s_map[n][0] != 0 for n in cond_back): valid = False
-                        if valid and cond_win and any(s_map[n][1] != 4 for n in cond_win): valid = False
-                        if valid and cond_hall and any(s_map[n][1] != 0 for n in cond_hall): valid = False
-                        if valid:
-                            conn.update(worksheet="자리배치", data=pd.DataFrame(grid))
-                            success = True; break
+                            if not (p1[0] == p2[0] and abs(p1[1]-p2[1]) == 1): valid = False; break
+                    if valid and cond_sep:
+                        for i in range(len(cond_sep)):
+                            for j in range(i+1, len(cond_sep)):
+                                p1, p2 = s_map[cond_sep[i]], s_map[cond_sep[j]]
+                                if abs(p1[0]-p2[0]) + abs(p1[1]-p2[1]) == 1: valid = False; break
+                    if valid and cond_front and any(s_map[n][0] != 3 for n in cond_front): valid = False
+                    if valid and cond_back and any(s_map[n][0] != 0 for n in cond_back): valid = False
+                    if valid and cond_win and any(s_map[n][1] != 4 for n in cond_win): valid = False
+                    if valid and cond_hall and any(s_map[n][1] != 0 for n in cond_hall): valid = False
+                    if valid:
+                        conn.update(worksheet="자리배치", data=pd.DataFrame(grid)); success = True; break
                 if success: st.rerun()
-                else: st.error("조건에 맞는 배치를 찾지 못했습니다.")
-
+                else: st.error("조건을 만족하는 배치를 찾지 못했습니다.")
         with c2:
             if st.button("🔢 번호순", use_container_width=True):
                 ordered = all_students.copy()
@@ -194,20 +210,15 @@ def show_page(conn, user):
                         if new_grid[r][c] == "X": continue
                         if s_idx < len(ordered):
                             new_grid[r][c] = ordered[s_idx]; s_idx += 1
-                conn.update(worksheet="자리배치", data=pd.DataFrame(new_grid))
-                st.rerun()
-
+                conn.update(worksheet="자리배치", data=pd.DataFrame(new_grid)); st.rerun()
         with c3:
             if st.button("🖨️ 인쇄", use_container_width=True):
                 components.html("<script>window.parent.print();</script>", height=0)
 
-    # --- 5. 시각적 출력 영역 ---
-    # 이 영역은 인쇄 시 제목과 함께 출력됩니다.
-    st.markdown('<div class="print-area">', unsafe_allow_html=True)
-    
-    # [좌석 그리드]
+    # --- 5. [좌석 그리드 출력] (인쇄 영역 내부) ---
     grid_html = '<div class="seat-grid">'
-    for r in range(4):
+    # reversed(range(4))를 사용하여 1열(r=0, 앞자리)이 아래쪽에 위치하도록 함
+    for r in reversed(range(4)):
         for c in range(5):
             try: val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
             except: val = ""
@@ -217,11 +228,7 @@ def show_page(conn, user):
     grid_html += '</div>'
     st.markdown(grid_html, unsafe_allow_html=True)
 
-    # [교탁 및 칠판]
+    # --- 6. [교탁 및 칠판] (인쇄 영역 내부) ---
     st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
     st.markdown('<div class="blackboard">칠 판 (앞)</div>', unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True) 
-
-    # 안내 문구 (웹 전용)
-    st.info("💡 화면 아래쪽이 교실 앞(칠판)입니다.")
+    st.markdown('</div>', unsafe_allow_html=True) # print-area 종료
