@@ -24,26 +24,20 @@ dept_str = str(FIXED_INFO['dept']).replace('.0', '')
 grade_str = str(FIXED_INFO['grade']).replace('.0', '')
 cls_str = str(FIXED_INFO['cls']).replace('.0', '')
 
-# [CSS: 상단 고정 헤더]
+# [CSS: 상단 고정 헤더 (Sticky)]
 st.markdown("""
     <style>
-    .fixed-header {
-        position: fixed;
+    .sticky-header {
+        position: -webkit-sticky;
+        position: sticky;
         top: 0;
-        left: 0;
-        width: 100%;
-        background-color: #f8f9fa;
-        padding: 10px 20px;
-        border-bottom: 2px solid #e0e0e0;
-        z-index: 99999;
-        display: flex;
-        align-items: center;
-        height: 60px;
+        background-color: white;
+        z-index: 9999;
+        padding: 10px 0;
+        border-bottom: 1px solid #e0e0e0;
     }
-    /* 본문 콘텐츠가 헤더 아래에서 시작되도록 여백 설정 */
-    [data-testid="stMainBlockContainer"] {
-        padding-top: 80px;
-    }
+    /* Streamlit 기본 여백 조정 */
+    .block-container { padding-top: 1rem !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -86,8 +80,8 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # [고정 헤더 렌더링]
-    st.markdown('<div class="fixed-header">', unsafe_allow_html=True)
+    # [고정 헤더 컨테이너]
+    st.markdown('<div class="sticky-header">', unsafe_allow_html=True)
     if st.session_state.page != "메인 홈":
         if st.button("⬅️ 메인 홈 돌아가기"):
             st.session_state.page = "메인 홈"; st.rerun()
@@ -105,7 +99,7 @@ else:
         if selected != st.session_state.page: st.session_state.page = selected; st.rerun()
         if st.button("로그아웃", use_container_width=True): st.session_state.clear(); st.rerun()
 
-    # 페이지 라우팅
+    # 페이지 라우팅 (헤더 아래 내용)
     if st.session_state.page == "메인 홈":
         st.markdown(f"<h1 style='font-size: 2.0rem;'>👋 {grade_str}학년 {cls_str}반 {user['name']}님</h1>", unsafe_allow_html=True)
         now = get_kst()
