@@ -4,70 +4,25 @@ import random
 import streamlit.components.v1 as components
 
 def show_page(conn, user):
-    # --- 1. CSS 스타일 (디자인 개선 및 강력한 스타일 강제 적용) ---
+    # --- 1. CSS 스타일 (시간표 모듈 스타일 적용 및 모바일 5열 유지) ---
     st.markdown("""
         <style>
-        /* [공통] 웹 화면 기본 설정 및 선 제거 */
+        /* 웹 화면 기본 설정 및 불필요한 선 제거 */
         [data-testid="stHeader"], [data-testid="stDecoration"] { display: none !important; }
-        .block-container { padding-top: 0rem !important; padding-bottom: 2rem !important; max-width: 100% !important; }
-        hr { display: none !important; } /* 모든 구분선 제거 */
+        .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; max-width: 100% !important; }
+        hr { display: none !important; }
 
-        /* [1. 상단 고정 내비게이션 바] */
-        .sticky-nav {
-            position: sticky;
-            top: 0;
-            z-index: 1001;
-            background-color: white !important;
-            padding: 15px 0 !important;
-            border-bottom: none !important;
-        }
-
-        /* [2. 네비게이션 버튼 - 차분한 네이비 블루 #2C3E50] */
-        div.stButton > button:first-child {
-            background-color: #2C3E50 !important;
-            color: #FFFFFF !important;
-            font-weight: 700 !important;
-            border: none !important;
-            border-radius: 10px !important;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15) !important;
-            height: 3.2rem !important;
-            transition: all 0.2s ease !important;
-        }
-        div.stButton > button:first-child:hover {
-            background-color: #1A252F !important;
-            box-shadow: 0 6px 15px rgba(0,0,0,0.2) !important;
-            transform: translateY(-1px) !important;
-        }
-
-        /* [제목 영역 스타일] */
-        .title-container {
-            text-align: left !important;
-            margin-top: 5px !important;
-            margin-bottom: 10px !important; /* 좌석표와 조밀하게 유지 */
-        }
-        .main-title {
-            font-size: 2.2rem !important;
-            font-weight: 800 !important;
-            color: #2C3E50 !important;
-            margin-bottom: 0px !important;
-        }
-        .sub-title {
-            font-size: 1.4rem !important;
-            font-weight: 500 !important;
-            color: #7F8C8D !important;
-            margin-top: -5px !important;
-        }
-
-        /* [좌석표 그리드] */
+        /* [좌석표 그리드] 모바일에서도 5열 유지 */
         .seat-grid {
             display: grid; 
             grid-template-columns: repeat(5, 1fr);
             gap: 8px !important; 
             width: 100% !important;
+            margin-top: 10px !important;
         }
         .seat-container {
             background-color: #ffffff !important; 
-            border: 1px solid #E0E0E0 !important; /* 연한 회색 테두리 */
+            border: 1px solid #E0E0E0 !important; 
             border-radius: 8px !important; 
             padding: 8px 2px !important; 
             text-align: center !important;
@@ -81,7 +36,7 @@ def show_page(conn, user):
         .seat-name { 
             font-weight: 700 !important; 
             font-size: 11px !important; 
-            color: #000000 !important; /* 선명한 검은색 글자 */
+            color: #000000 !important; 
             line-height: 1.1 !important; 
         }
         .seat-x { 
@@ -91,12 +46,12 @@ def show_page(conn, user):
             -webkit-print-color-adjust: exact; 
         }
 
-        /* [교탁 및 칠판 간격 대폭 조정] */
+        /* [교탁 및 칠판 간격 조정] */
         .teacher-desk {
             background-color: #8d6e63 !important; 
             width: 90px !important; 
             height: 35px !important;
-            margin: 40px auto 40px auto !important; /* 좌석-교탁, 교탁-칠판 간격 40px */
+            margin: 40px auto 40px auto !important; 
             border-radius: 4px !important;
             display: flex !important; 
             align-items: center !important; 
@@ -122,31 +77,23 @@ def show_page(conn, user):
         /* 인쇄 시 레이아웃 */
         @media print {
             @page { size: A4 landscape; margin: 10mm; }
-            .sticky-nav, .stButton, .stExpander, .stAlert, [data-testid="stHeader"] { display: none !important; }
+            header, footer, .stSidebar, .stButton, .stExpander, .stAlert, [data-testid="stHeader"] { display: none !important; }
             .print-area { display: block !important; width: 100% !important; }
             .seat-container { border: 2px solid #333 !important; min-height: 100px !important; }
             .seat-name { font-size: 18px !important; }
-            .main-title { font-size: 26px !important; }
-            .sub-title { font-size: 16px !important; }
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # --- 2. 상단 고정 네비게이션 버튼 (통합 및 하나로 고정) ---
-    st.markdown('<div class="sticky-nav">', unsafe_allow_html=True)
-    if st.button("🔙 메인 홈으로 돌아가기", key="back_to_home_seat", use_container_width=True):
+    # --- 2. [홈 버튼] 시간표 스타일 (Sticky 제거, 일반 버튼 형식) ---
+    if st.button("⬅️ BACK 메인 홈으로 돌아가기", key="back_to_home_seat"):
         st.session_state.page = "메인 홈"
         st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- 3. 제목 및 부제목 (왼쪽 정렬 및 시간표 스타일 참고) ---
+    # --- 3. [제목 및 부제목] 시간표 디자인과 동일하게 적용 ---
     st.markdown('<div class="print-area">', unsafe_allow_html=True)
-    st.markdown("""
-        <div class="title-container">
-            <div class="main-title">🪑 학급 자리배치</div>
-            <div class="sub-title">3학년 2반 (컴퓨터전자과)</div>
-        </div>
-    """, unsafe_allow_html=True)
+    st.title("🪑 학급 자리배치")
+    st.markdown("### 3학년 2반 (컴퓨터전자과)")
 
     # 데이터 로드
     try:
@@ -201,10 +148,14 @@ def show_page(conn, user):
                             
                             valid = True
                             for p in fb_pairs:
+                                if p[0] not in s_map or p[1] not in s_map:
+                                    valid = False; break
                                 p1, p2 = s_map[p[0]], s_map[p[1]]
                                 if not (p1[1] == p2[1] and abs(p1[0]-p2[0]) == 1): valid = False; break
                             if valid:
                                 for p in ss_pairs:
+                                    if p[0] not in s_map or p[1] not in s_map:
+                                        valid = False; break
                                     p1, p2 = s_map[p[0]], s_map[p[1]]
                                     if not (p1[0] == p2[0] and abs(p1[1]-p2[1]) == 1): valid = False; break
                             if valid and cond_sep:
@@ -236,9 +187,8 @@ def show_page(conn, user):
                 if st.button("🖨️ 자리배치 인쇄", use_container_width=True):
                     components.html("<script>window.parent.print();</script>", height=0)
 
-    # --- 5. 학생 자리 그리드 (1열이 아래쪽으로 역순 출력) ---
+    # --- 5. 학생 자리 그리드 ---
     grid_html = '<div class="seat-grid">'
-    # r=0(뒷자리) ~ r=3(앞자리) 데이터 구조에서 시각적으로 앞자리가 아래로 가게 출력
     for r in range(4):
         for c in range(5):
             try: val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
@@ -249,7 +199,7 @@ def show_page(conn, user):
     grid_html += '</div>'
     st.markdown(grid_html, unsafe_allow_html=True)
 
-    # --- 6. 교탁 및 칠판 (간격 확보됨) ---
+    # --- 6. 교탁 및 칠판 (간격 확보) ---
     st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
     st.markdown('<div class="blackboard">칠 판 (앞)</div>', unsafe_allow_html=True)
     
