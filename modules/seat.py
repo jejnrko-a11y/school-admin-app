@@ -4,12 +4,14 @@ import random
 import streamlit.components.v1 as components
 
 def show_page(conn, user):
-    st.title("🪑 지능형 조건부 자리배치")
+    # 웹 화면용 제목
+    st.title("컴퓨터전자 3-2반 자리배치")
 
-    # --- 1. CSS 스타일 (인쇄 최적화 및 모바일 그리드) ---
+    # --- 1. CSS 스타일 (모바일 그리드 및 인쇄 정밀 제어) ---
     st.markdown("""
         <style>
-        /* 기본 레이아웃 스타일 */
+        /* 웹 화면용 기본 스타일 */
+        .print-title { display: none; } /* 웹에서는 숨김 */
         .blackboard {
             background-color: #1e3d2f !important; color: white !important; border: 6px solid #5d4037;
             border-radius: 5px; padding: 15px; text-align: center;
@@ -38,23 +40,24 @@ def show_page(conn, user):
         .seat-x { color: #ff5252 !important; font-weight: bold; font-size: 16px; -webkit-print-color-adjust: exact; }
         .cond-label { font-size: 13px; font-weight: bold; color: #1E3A8A; margin-top: 5px; }
 
-        /* 인쇄 설정 (A4 가로 모드 최적화) */
+        /* 인쇄 설정 (A4 가로 최적화) */
         @media print {
-            @page { size: A4 landscape; margin: 0; }
-            html, body { height: 100vh; margin: 0 !important; padding: 0 !important; overflow: hidden; }
-            
-            /* 인쇄 시 스트림릿 기본 UI 모두 숨김 */
-            header, footer, .stSidebar, .stButton, .stExpander, .no-print, [data-testid="stHeader"] {
+            @page { size: A4 landscape; margin: 10mm; }
+            header, footer, .stSidebar, .stButton, .stExpander, .stAlert, [data-testid="stHeader"] {
                 display: none !important;
             }
-            
-            /* 인쇄 영역 강제 노출 및 중앙 배치 */
-            .main .block-container { padding: 0 !important; max-width: 100% !important; }
+            .main .block-container { padding: 0 !important; }
+            .print-title { 
+                display: block !important; 
+                text-align: center; 
+                font-size: 28px; 
+                font-weight: bold; 
+                margin-bottom: 20px; 
+                color: black;
+            }
             .print-area {
                 display: block !important;
-                position: absolute; left: 50%; top: 50%;
-                transform: translate(-50%, -50%) scale(1.1);
-                width: 90% !important;
+                width: 100% !important;
             }
             .seat-grid { gap: 15px !important; }
             .seat-container { border: 2px solid #000 !important; min-height: 100px !important; }
@@ -75,41 +78,40 @@ def show_page(conn, user):
         st.error(f"데이터 로드 오류: {e}")
         return
 
-    # 5분단(가장 왼쪽 Col 0)의 뒷자리(Row 0, Row 1) 고정석
-    fixed_x_coords = [(0, 0), (1, 0)] 
+    fixed_x_coords = [(0, 0), (1, 0)] # 5분단(왼쪽) 뒷자리 X
 
-    # --- 3. 교사 전용 관리 기능 ---
+    # --- 3. 교사 관리 도구 ---
     fb_pairs, ss_pairs = [], []
     cond_sep, cond_front, cond_back, cond_win, cond_hall = [], [], [], [], []
 
     if user['name'] == "교사":
-        with st.expander("⚙️ 특별 자리배치 조건 설정 (셔플 시 적용)"):
+        with st.expander("⚙️ 특별 자리배치 조건 설정"):
             st.info("💡 오른쪽(1분단)이 창가, 왼쪽(5분단)이 복도입니다.")
             
-            st.markdown('<p class="cond-label">↕️ 앞뒤 짝궁 (세로)</p>', unsafe_allow_html=True)
+            st.markdown('<p class="cond-label">↕️ 앞뒤 짝궁</p>', unsafe_allow_html=True)
             c_fb = st.columns(3)
             for i in range(3):
                 p = c_fb[i].multiselect(f"앞뒤 커플 {i+1}", all_students, max_selections=2, key=f"fb_{i}")
                 if len(p) == 2: fb_pairs.append(p)
 
-            st.markdown('<p class="cond-label">↔️ 양옆 짝궁 (가로)</p>', unsafe_allow_html=True)
+            st.markdown('<p class="cond-label">↔️ 양옆 짝궁</p>', unsafe_allow_html=True)
             c_ss = st.columns(3)
             for i in range(3):
                 p = c_ss[i].multiselect(f"양옆 커플 {i+1}", all_students, max_selections=2, key=f"ss_{i}")
                 if len(p) == 2: ss_pairs.append(p)
 
-            st.markdown('<p class="cond-label">🚫 위치 및 기타 조건</p>', unsafe_allow_html=True)
-            cond_sep = st.multiselect("💢 분리 지정 (인접 불가)", all_students)
-            cond_front = st.multiselect("📏 앞자리 (1열/아래)", all_students)
-            cond_back = st.multiselect("📺 뒷자리 (4열/위)", all_students)
-            cond_win = st.multiselect("🪟 창가 지정 (1분단/오른쪽)", all_students)
-            cond_hall = st.multiselect("🚪 복도 지정 (5분단/왼쪽)", all_students)
+            st.markdown('<p class="cond-label">🚫 위치 조건</p>', unsafe_allow_html=True)
+            cond_sep = st.multiselect("💢 분리 지정", all_students)
+            cond_front = st.multiselect("📏 앞자리 (1열)", all_students)
+            cond_back = st.multiselect("📺 뒷자리 (4열)", all_students)
+            cond_win = st.multiselect("🪟 창가 (1분단/오른쪽)", all_students)
+            cond_hall = st.multiselect("🚪 복도 (5분단/왼쪽)", all_students)
 
         c1, c2, c3 = st.columns(3)
         with c1:
             if st.button("🎲 조건부 자리 바꾸기", use_container_width=True):
                 success = False
-                with st.spinner("계산 중..."):
+                with st.spinner("최적의 배치를 계산 중..."):
                     for _ in range(20000):
                         shuff = all_students.copy()
                         random.shuffle(shuff)
@@ -122,7 +124,6 @@ def show_page(conn, user):
                                 elif s_idx < len(shuff):
                                     name = shuff[s_idx]; grid[r][c] = name
                                     s_map[name] = (r, c); s_idx += 1
-                        
                         valid = True
                         for p in fb_pairs:
                             p1, p2 = s_map[p[0]], s_map[p[1]]
@@ -140,12 +141,11 @@ def show_page(conn, user):
                         if valid and cond_back and any(s_map[n][0] != 0 for n in cond_back): valid = False
                         if valid and cond_win and any(s_map[n][1] != 4 for n in cond_win): valid = False
                         if valid and cond_hall and any(s_map[n][1] != 0 for n in cond_hall): valid = False
-
                         if valid:
                             conn.update(worksheet="자리배치", data=pd.DataFrame(grid))
                             success = True; break
                 if success: st.rerun()
-                else: st.error("조건을 만족하는 배치를 찾지 못했습니다.")
+                else: st.error("조건에 맞는 배치를 찾지 못했습니다.")
 
         with c2:
             if st.button("🔢 번호순", use_container_width=True):
@@ -153,9 +153,7 @@ def show_page(conn, user):
                 new_grid = [["" for _ in range(5)] for _ in range(4)]
                 for rx, cx in fixed_x_coords: new_grid[rx][cx] = "X"
                 s_idx = 0
-                # 이미지처럼 1분단(오른쪽 Col 4)부터 왼쪽(5분단 Col 0)으로 이동
                 for c in range(4, -1, -1):
-                    # 아래(앞자리 Row 3)에서 위(뒷자리 Row 0)로 올라가며 배치
                     for r in range(3, -1, -1):
                         if new_grid[r][c] == "X": continue
                         if s_idx < len(ordered):
@@ -166,13 +164,16 @@ def show_page(conn, user):
 
         with c3:
             if st.button("🖨️ 자리배치 인쇄", use_container_width=True):
-                # 부모 창의 인쇄 기능을 실행하는 스크립트
                 components.html("<script>window.parent.print();</script>", height=0)
 
     # --- 4. 시각적 출력 (인쇄 영역) ---
+    # 인쇄 전용 컨테이너 시작
     st.markdown('<div class="print-area">', unsafe_allow_html=True)
     
-    # 그리드 출력 (뒷편 시점이므로 데이터 Row 0(뒤) -> 3(앞) 순으로 출력)
+    # 인쇄 시에만 보이는 제목
+    st.markdown('<div class="print-title">컴퓨터전자 3-2반 자리배치</div>', unsafe_allow_html=True)
+    
+    # 그리드 출력
     grid_html = '<div class="seat-grid">'
     for r in range(4):
         for c in range(5):
@@ -186,6 +187,8 @@ def show_page(conn, user):
 
     st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
     st.markdown('<div class="blackboard">칠 판 (앞)</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True) # print-area 끝
 
-    st.info("💡 화면 아래쪽이 교실 앞(칠판)입니다. 인쇄 시 여백 없이 출력됩니다.")
+    # 안내 문구 (웹 전용)
+    st.info("💡 화면 아래쪽이 교실 앞(칠판)입니다.")
