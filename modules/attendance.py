@@ -6,47 +6,79 @@ from utils import get_kst
 
 def show_page(conn):
     # ==========================================
-    # 1. CSS 정의 (인쇄 최적화 및 모바일 UI)
+    # 1. CSS 정의 (가로 인쇄 최적화 및 줄바꿈 UI)
     # ==========================================
     st.markdown("""
         <style>
-        /* [모바일 최적화] 표 폰트 크기 조정 및 가로폭 최대 활용 */
+        /* [화면용] 표 폰트 크기 및 상세사유 줄바꿈 보조 */
         [data-testid="stDataFrame"] {
             font-size: 12px !important;
         }
-        
+
         /* [인쇄 최적화] @media print */
         @media print {
-            /* A4 세로 설정 및 여백 최적화 */
+            /* A4 가로 설정 및 여백 최적화 */
             @page {
-                size: A4 portrait;
+                size: A4 landscape;
                 margin: 10mm;
             }
             
-            /* 인쇄 시 숨길 요소들 (사이드바, 헤더, 입력 폼, 버튼, 푸터) */
+            /* 인쇄 시 불필요한 Streamlit UI 요소 모두 숨김 */
             header, [data-testid="stHeader"], [data-testid="stSidebar"], 
             .stButton, div[data-testid="stForm"], .stTabs [role="tablist"],
-            hr, [data-testid="stDecoration"] {
+            hr, [data-testid="stDecoration"], .stInfo, .stSubheader, .stTitle {
                 display: none !important;
             }
             
-            /* 본문 영역 확장 */
-            .main .block-container {
-                padding: 0 !important;
-                margin: 0 !important;
-                max-width: 100% !important;
-            }
-            
-            /* 데이터프레임 너비 강제 확장 */
+            /* 화면용 데이터프레임 숨기고 인쇄 전용 테이블 표시 */
             div[data-testid="stDataFrame"] {
-                width: 100% !important;
+                display: none !important;
             }
+
+            .print-only-table {
+                display: table !important;
+                width: 100% !important;
+                border-collapse: collapse !important;
+                font-size: 11px !important;
+                color: black !important;
+            }
+
+            .print-only-table th, .print-only-table td {
+                border: 1px solid #333 !important;
+                padding: 8px !important;
+                text-align: center !important;
+                word-break: break-all !important;
+                white-space: normal !important; /* 줄바꿈 허용 */
+            }
+
+            /* 상세사유(비고) 칸은 왼쪽 정렬 및 넓은 너비 */
+            .print-only-table td.remark-cell {
+                text-align: left !important;
+                min-width: 250px !important;
+            }
+
+            /* 미제출 항목 강조 */
+            .print-row-unsubmitted {
+                background-color: #FFEBEE !important;
+                -webkit-print-color-adjust: exact;
+            }
+
+            /* 인쇄 시 컨테이너 너비 제한 해제 */
+            .main .block-container {
+                max-width: 100% !important;
+                padding: 0 !important;
+            }
+        }
+
+        /* [화면용] 인쇄 전용 테이블은 평소에 숨김 */
+        .print-only-table {
+            display: none;
         }
         </style>
     """, unsafe_allow_html=True)
 
     st.title("🤖 스마트 서류 크로스체크")
-    st.info("특이사항을 기록하면 학생들이 제출한 결석계와 대조하여 서류 제출 여부를 실시간 판별합니다.")
+    st.info("특이사항 기록 시 날짜를 바꾸면 자동으로 해당 요일의 전체 범위가 선택됩니다.")
 
     # 2. 데이터 로드
     try:
@@ -65,31 +97,24 @@ def show_page(conn):
         st.error(f"데이터 로드 중 오류 발생: {e}"); return
 
     # ---------------------------------------------------------
-    # PART 1: 특이사항 학생 추가 (요일별 자동 감지 로직)
+    # PART 1: 특이사항 기록 추가
     # ---------------------------------------------------------
     st.subheader("➕ 특이사항 기록 추가")
 
-    # [요일 판별 및 교시 옵션 설정]
-    # 사용자가 날짜를 바꿀 때 슬라이더가 자동으로 리셋되도록 세션 상태에 날짜 저장
     if 'prev_date' not in st.session_state:
         st.session_state.prev_date = get_kst().date()
 
-    # 날짜 입력 UI
     target_date = st.date_input("발생 날짜 선택", value=st.session_state.prev_date)
 
-    # 요일 계산 (0:월, 1:화, ...)
     weekday = target_date.weekday()
     period_options = ["조회", "1교시", "2교시", "3교시", "4교시", "5교시", "6교시"]
-    if weekday == 1: # 화요일일 때만 7교시 추가
-        period_options.append("7교시")
+    if weekday == 1: period_options.append("7교시")
     period_options.append("종례")
 
-    # [중요] 날짜가 바뀌었을 경우 슬라이더 값을 해당 요일의 전체 범위로 자동 리셋
     if target_date != st.session_state.prev_date:
         st.session_state.slider_val = (period_options[0], period_options[-1])
-        st.session_state.prev_date = target_date # 현재 날짜 업데이트
+        st.session_state.prev_date = target_date
 
-    # 슬라이더 기본값 보장 로직
     if 'slider_val' not in st.session_state:
         st.session_state.slider_val = (period_options[0], period_options[-1])
 
@@ -103,17 +128,8 @@ def show_page(conn):
         with c4: remark = st.text_input("비고 (나이스 입력용 사유 등)", placeholder="예: 감기 증상으로 인한 병원 방문")
 
         st.write("")
-        st.markdown(f"##### ⏰ {target_date.strftime('%m/%d')} ({['월','화','수','목','금','토','일'][weekday]}) 교시 선택")
-        
-        # 종류가 '결석'이면 강제로 전체 범위, 아니면 세션 상태(혹은 드래그값) 사용
         slider_value = (period_options[0], period_options[-1]) if category == "결석" else st.session_state.slider_val
-
-        selected_range = st.select_slider(
-            "드래그하여 시작/종료 교시를 선택하세요",
-            options=period_options,
-            value=slider_value,
-            key="range_slider"
-        )
+        selected_range = st.select_slider("⏰ 교시 범위 선택", options=period_options, value=slider_value, key="range_slider")
 
         if st.form_submit_button("기록 추가", use_container_width=True):
             s_num = int(selected_student.split('번')[0])
@@ -127,22 +143,18 @@ def show_page(conn):
             
             updated_special = pd.concat([df_special, new_row], ignore_index=True)
             conn.update(worksheet="출결특이사항", data=updated_special)
-            st.session_state.slider_val = (period_options[0], period_options[-1]) # 추가 후 리셋
-            st.cache_data.clear()
-            st.success(f"✅ {s_name} 학생 기록 추가 완료!")
-            st.rerun()
+            st.session_state.slider_val = (period_options[0], period_options[-1])
+            st.cache_data.clear(); st.success("저장 완료!"); st.rerun()
 
     st.divider()
 
     # ---------------------------------------------------------
-    # PART 2: 월별 서류 대조 현황 (모바일 최적화 및 인쇄)
+    # PART 2: 월별 서류 대조 현황 및 가로 인쇄
     # ---------------------------------------------------------
     st.subheader("📋 월별 서류 대조 현황")
 
-    if df_special.empty:
-        st.info("기록된 특이사항이 없습니다.")
-    else:
-        # [데이터 가공 로직]
+    if not df_special.empty:
+        # 데이터 가공
         def check_submission_robust(row, reports):
             if reports.empty: return "미제출(X)"
             try:
@@ -198,10 +210,40 @@ def show_page(conn):
                             <button onclick="window.parent.print()" style="
                                 width: 100%; padding: 8px; background-color: #1E3A8A; 
                                 color: white; border: none; border-radius: 5px; cursor: pointer;
-                                font-weight: bold; font-size: 12px;">🖨️ 인쇄</button>
+                                font-weight: bold; font-size: 12px;">🖨️ 가로 인쇄</button>
                         """, height=45)
                     
-                    # [모바일 한눈에 보기 UI 적용]
+                    # --- [인쇄 전용 HTML 테이블 생성 영역] ---
+                    # 상세사유 줄바꿈 및 인쇄 시 잘림 방지를 위해 HTML로 직접 테이블 생성
+                    html_table = f"""
+                    <div class="print-only-table-container">
+                        <h2 style="text-align: center;">{current_month}월 출결 현황 및 서류 대조표</h2>
+                        <table class="print-only-table">
+                            <thead>
+                                <tr>
+                                    <th>날짜</th><th>학생명</th><th>종류</th><th>사유</th><th>교시</th><th style="width:30%">상세사유(비고)</th><th>서류</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    """
+                    for _, row in month_df.iterrows():
+                        row_class = "print-row-unsubmitted" if row['제출여부'] == "미제출(X)" else ""
+                        html_table += f"""
+                                <tr class="{row_class}">
+                                    <td>{row['3/8형식']}</td>
+                                    <td>{row['학생명']}</td>
+                                    <td>{row['종류']}</td>
+                                    <td>{row['사유']}</td>
+                                    <td>{row['교시표시']}</td>
+                                    <td class="remark-cell">{row['비고']}</td>
+                                    <td>{row['제출여부']}</td>
+                                </tr>
+                        """
+                    html_table += "</tbody></table></div>"
+                    st.markdown(html_table, unsafe_allow_html=True)
+                    # --- [인쇄 영역 끝] ---
+
+                    # [화면용 데이터프레임]
                     st.dataframe(
                         month_df.style.apply(style_rows, axis=1),
                         use_container_width=True,
@@ -209,11 +251,9 @@ def show_page(conn):
                         column_config={
                             "3/8형식": st.column_config.TextColumn("날짜", width=40),
                             "학생명": st.column_config.TextColumn("학생명", width=80),
-                            "종류": st.column_config.TextColumn("종류", width=50),
-                            "사유": st.column_config.TextColumn("사유", width=50),
                             "교시표시": st.column_config.TextColumn("교시", width=80),
                             "제출여부": st.column_config.TextColumn("서류", width=70),
-                            "비고": st.column_config.TextColumn("상세사유(비고)")
+                            "비고": st.column_config.TextColumn("상세사유(비고)", width="large")
                         }
                     )
         
