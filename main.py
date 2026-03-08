@@ -73,8 +73,6 @@ def login_page():
             else:
                 st.error("비밀번호가 틀렸습니다.")
 
-# [위 부분은 동일]
-
 # ==========================================
 # 3. 메인 로직 및 내비게이션
 # ==========================================
@@ -88,56 +86,38 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # [수정됨] 고정 버튼을 사이드바 맨 위로 이동 (스크롤 영향을 안 받음)
+    # 사이드바 영역 (모든 페이지에서 고정됨)
     with st.sidebar:
         st.title(f"👤 {grade_str}학년 {cls_str}반 {user['name']}님")
+        if user['name'] not in ["교사", "관리자", "테스트계정"]:
+            st.write(f"{grade_str}-{cls_str} {user['num']}번")
         
-        # 홈 돌아가기 버튼을 사이드바 최상단에 배치
+        # [고정 버튼] 사이드바 최상단 배치
         if st.session_state.page != "메인 홈":
             if st.button("⬅️ 메인 홈 돌아가기", use_container_width=True):
                 st.session_state.page = "메인 홈"
                 st.rerun()
             st.divider()
-        
-        # 나머지 메뉴
+
         menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
         if user['name'] in ["교사", "관리자"]:
             menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
-        
+
         try:
             current_idx = menu_list.index(st.session_state.page)
         except:
             current_idx = 0
             st.session_state.page = "메인 홈"
-            
-        selected_menu = st.sidebar.radio("메뉴", menu_list, index=current_idx)
+
+        selected_menu = st.radio("메뉴", menu_list, index=current_idx)
         
         if selected_menu != st.session_state.page:
             st.session_state.page = selected_menu
             st.rerun()
-            
-        if st.sidebar.button("로그아웃"):
+        
+        if st.button("로그아웃", use_container_width=True):
             st.session_state.clear()
             st.rerun()
-
-    # (이하 페이지 라우팅 로직은 동일)
-    if st.session_state.page == "메인 홈":
-        # ... (메인 홈 코드)
-
-    # 사이드바
-    st.sidebar.title(f"👤 {grade_str}학년 {cls_str}반 {user['name']}님")
-    if user['name'] not in ["교사", "관리자", "테스트계정"]:
-        st.sidebar.write(f"{grade_str}-{cls_str} {user['num']}번")
-    
-    selected_menu = st.sidebar.radio("메뉴", menu_list, index=current_idx)
-    
-    if selected_menu != st.session_state.page:
-        st.session_state.page = selected_menu
-        st.rerun()
-    
-    if st.sidebar.button("로그아웃"):
-        st.session_state.clear()
-        st.rerun()
 
     # 페이지 라우팅
     if st.session_state.page == "메인 홈":
