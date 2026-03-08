@@ -176,7 +176,7 @@ else:
             with tc2:
                 if st.button("📁\n\n결석계 확인", use_container_width=True):
                     st.session_state.page = "교사용 결석계 확인"; st.rerun()
-
+# (main.py 라우팅 부분 예시)
     elif st.session_state.page == "교사용 출석체크":
         attendance.show_page(conn)
     elif st.session_state.page == "교사용 결석계 확인":
@@ -188,4 +188,4 @@ else:
     elif st.session_state.page == "비밀번호 변경":
         settings.show_page(conn, user)
     elif st.session_state.page == "자리배치":
-        seat.show_page(conn, user)
+        seat.show_page(conn, user) # 이 줄이 정상적으로 modules/seat.py를 가리킵니다.
