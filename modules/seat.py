@@ -58,31 +58,44 @@ def show_page(conn, user):
             }
             .sticky-marker, .fixed-header-bg { display: none !important; }
             
-            /* ★ 핵심: 짤림 현상(음수 마진)을 제거하고, zoom 속성으로 85% 안전하게 축소 */
             .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"] {
                 border: none !important;
                 outline: none !important;
                 box-shadow: none !important;
                 background-color: transparent !important;
                 padding-top: 0 !important;
-                margin-top: 0 !important; /* 음수 마진 제거 (짤림 방지) */
+                margin-top: 0 !important; 
                 max-width: 100% !important;
                 zoom: 0.85 !important; /* 전체 크기를 85%로 축소하여 한 장에 맞춤 */
             }
             
             div[data-testid="stHeadingWithActionElements"] {
                 margin-top: 0 !important;
-                padding-top: 10px !important; /* 제목 위쪽 여백 살짝 확보 */
-                margin-bottom: -15px !important; 
+                padding-top: 10px !important; 
+                margin-bottom: 0px !important; /* 위아래 여백 살짝 조정 */
                 padding-bottom: 0 !important;
                 border: none !important;
             }
             
+            /* ★ 핵심: 인쇄할 때 네모칸(자리) 크기를 위아래로 대폭 확대 (약 130%) */
             .seat-card {
                 border: 2px solid #000 !important;
                 box-shadow: none !important;
                 break-inside: avoid;
+                min-height: 115px !important; /* 기존 85px에서 115px로 높이 증가 */
+                padding: 5px !important;
             }
+            
+            /* ★ 핵심: 인쇄할 때 학생 이름 및 번호 글자 크기를 꽉 차게 확대 */
+            .seat-name { 
+                font-size: 24px !important; /* 기존 15px에서 24px로 대폭 확대 */
+                font-weight: 900 !important; /* 글씨 굵기도 가장 두껍게 */
+                line-height: 1.3 !important;
+            }
+            .seat-x { 
+                font-size: 30px !important; /* X 표시도 함께 확대 */
+            }
+            
             .blackboard { border: 4px solid #000 !important; padding: 15px !important; margin-bottom: 0 !important;}
             .teacher-desk { margin: 20px auto 15px auto !important; }
             
@@ -96,11 +109,10 @@ def show_page(conn, user):
         df_seat = conn.read(worksheet="자리배치", ttl="10m")
         df_students = load_student_list(conn, exclude_admins=True)
         
-        # 💡 [핵심수정] 번호가 정상적인 숫자인 학생만 걸러내어 OOO(O번) 형식으로 리스트 생성
         all_students = []
         for _, row in df_students.iterrows():
             num_str = str(row['번호']).replace('.0', '').strip()
-            if num_str.isdigit(): # 번호가 숫자(예: 1, 2, 3...)인 경우만 허용
+            if num_str.isdigit(): 
                 name_str = str(row['이름']).strip()
                 all_students.append(f"{name_str}({num_str}번)")
         
