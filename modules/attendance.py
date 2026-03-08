@@ -106,24 +106,22 @@ def show_page(conn):
             st.rerun()
 
     # ---------------------------------------------------------
-    # PART 2: 월별 탭 구성 및 자동 판별 (하단 확인부)
+    # PART 2: 월별 서류 대조 현황 테이블 (관리자용 UI 개선 버전)
     # ---------------------------------------------------------
     st.subheader("📋 월별 서류 대조 현황")
 
     if df_special.empty:
         st.info("기록된 특이사항이 아직 없습니다.")
     else:
-        # [Helper] 자동 판별 함수
+        # [Helper] 자동 판별 함수 (기존 로직 유지)
         def check_submission_robust(row, reports):
             if reports.empty: return "미제출(X)"
             try:
                 target_name = str(row['이름']).strip()
                 target_dt = datetime.strptime(str(row['날짜']).strip(), "%Y-%m-%d")
                 curr_year = target_dt.year
-                
                 student_reports = reports[reports['이름'].astype(str).str.strip() == target_name]
                 if student_reports.empty: return "미제출(X)"
-                
                 for _, rep in student_reports.iterrows():
                     period = str(rep['결석기간']).strip()
                     if not period or period == 'nan': continue
@@ -135,54 +133,69 @@ def show_page(conn):
                         else:
                             dt = datetime.strptime(f"{curr_year}-{period}", "%Y-%m-%d")
                             start_dt = end_dt = dt
-                        
-                        if start_dt <= target_dt <= end_dt:
-                            return "제출완료(O)"
+                        if start_dt <= target_dt <= end_dt: return "제출완료(O)"
                     except: continue
                 return "미제출(X)"
             except: return "미제출(X)"
 
-        # [Helper] 미제출 하이라이트 스타일
-        def style_rows(row):
-            if row['서류제출'] == "미제출(X)":
-                return ['background-color: #FFEBEE; color: #D32F2F; font-weight: bold'] * len(row)
-            return [''] * len(row)
+        # [Pandas 데이터 전처리] 관리자용 화면을 위한 가공
+        df_view = df_special.copy()
+        
+        # 1. 서류 제출 여부 판별
+        df_view['제출여부'] = df_view.apply(lambda r: check_submission_robust(r, df_absence_reports), axis=1)
+        
+        # 2. 날짜 형식 변환 ('2026-03-08' -> '3/8')
+        df_view['날짜_dt'] = pd.to_datetime(df_view['날짜'])
+        df_view['표시날짜'] = df_view['날짜_dt'].dt.strftime('%m/%d').str.replace('0', '', 1).str.replace('/0', '/')
+        
+        # 3. 이름(번호) 통합 컬럼 생성 ('강건영(1)')
+        df_view['이름(번호)'] = df_view['이름'] + "(" + df_view['번호'].astype(str).str.split('.').str[0] + ")"
+        
+        # 4. 교시(시간) 표시 로직 개선
+        def format_period(row):
+            if row['종류'] == '결석':
+                return '결석'
+            period = str(row['교시'])
+            if " ~ " in period:
+                return period.replace(" ~ ", "-") # '조회 ~ 종례' -> '조회-종례'
+            return period
 
-        # 데이터 가공
-        df_processed = df_special.copy()
-        df_processed['번호'] = pd.to_numeric(df_processed['번호'], errors='coerce').fillna(0).astype(int)
+        df_view['교시표시'] = df_view.apply(format_period, axis=1)
         
-        with st.spinner("서류 대조 중..."):
-            df_processed['서류제출'] = df_processed.apply(lambda r: check_submission_robust(r, df_absence_reports), axis=1)
-            df_processed['월'] = pd.to_datetime(df_processed['날짜']).dt.month
+        # 5. 월 정보 추출 및 최종 컬럼 선택/정렬
+        df_view['월'] = df_view['날짜_dt'].dt.month
+        df_view = df_view.sort_values(by=['날짜_dt', '번호'], ascending=[False, True]) # 최신 날짜순
         
-        # 월별 탭 생성
+        display_df = df_view[["표시날짜", "이름(번호)", "종류", "사유", "교시표시", "비고", "제출여부", "월"]]
+
+        # [Pandas Styling] 미제출 항목 하이라이트
+        def style_absence_table(row):
+            color = 'background-color: #FFEBEE; color: #D32F2F; font-weight: bold;' if row['제출여부'] == '미제출(X)' else ''
+            return [color] * len(row)
+
+        # 월별 탭 출력
         month_labels = [f"{m}월" for m in range(3, 13)]
         tabs = st.tabs(month_labels)
 
         for i, tab in enumerate(tabs):
             current_month = i + 3
             with tab:
-                month_df = df_processed[df_processed['월'] == current_month].copy()
+                month_df = display_df[display_df['월'] == current_month].drop(columns=['월'])
                 
                 if month_df.empty:
-                    st.write(f"📅 {current_month}월에 기록된 특이사항이 없습니다.")
+                    st.info(f"📅 {current_month}월에 기록된 특이사항이 없습니다.")
                 else:
-                    month_df = month_df.sort_values(by=['날짜', '번호'], ascending=[False, True])
-                    
-                    # '교시' 컬럼을 포함하여 표시
-                    display_cols = ["날짜", "번호", "이름", "종류", "사유", "교시", "서류제출", "비고"]
-                    
                     st.dataframe(
-                        month_df[display_cols].style.apply(style_rows, axis=1),
+                        month_df.style.apply(style_absence_table, axis=1),
                         use_container_width=True,
                         hide_index=True,
                         column_config={
-                            "번호": st.column_config.NumberColumn("번호", format="%d", width="small"),
-                            "날짜": st.column_config.TextColumn("날짜", width="medium"),
-                            "교시": st.column_config.TextColumn("⏰ 교시", width="medium"),
-                            "서류제출": st.column_config.TextColumn("📑 제출여부", width="medium"),
-                            "비고": st.column_config.TextColumn("상세 사유", width="large")
+                            "표시날짜": st.column_config.TextColumn("날짜", width="small"),
+                            "이름(번호)": st.column_config.TextColumn("이름(번호)", width="medium"),
+                            "종류": st.column_config.TextColumn("종류", width="small"),
+                            "교시표시": st.column_config.TextColumn("⏰ 교시", width="medium"),
+                            "제출여부": st.column_config.TextColumn("📑 제출여부", width="medium"),
+                            "비고": st.column_config.TextColumn("상세 비고", width="large")
                         }
                     )
         
