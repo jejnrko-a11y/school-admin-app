@@ -106,7 +106,7 @@ else:
             st.session_state.page = "메인 홈"
             st.rerun()
 
-    # 사이드바
+    # 사이드바 설정
     with st.sidebar:
         st.title(f"👤 {user['name']}님")
         menu_list = ["메인 홈", "시간표", "자리배치", "결석신고서 작성", "조퇴/외출/교내활동증 신청", "비밀번호 변경"]
@@ -128,35 +128,42 @@ else:
         now = get_kst()
         st.markdown(f"📅 {now.year}년 {now.month}월 {now.day}일<br>현재시간 : **{now.strftime('%H시 %M분')}**", unsafe_allow_html=True)
         
+        # 🚀 바로가기 (학생/교사 공통)
         st.markdown("### 🚀 바로가기")
-        c1, c2 = st.columns(2)
+        c1, c2, c3 = st.columns(3)
         if c1.button("📅 시간표", use_container_width=True): 
-            st.session_state.page = "시간표"
-            st.rerun()
-        if c1.button("🪑 자리배치", use_container_width=True): 
-            st.session_state.page = "자리배치"
-            st.rerun()
-        if c2.button("📝 결석신고서 작성", use_container_width=True): 
-            st.session_state.page = "결석신고서 작성"
-            st.rerun()
-        if c2.button("🔐 비밀번호 변경", use_container_width=True): 
-            st.session_state.page = "비밀번호 변경"
-            st.rerun()
+            st.session_state.page = "시간표"; st.rerun()
+        if c2.button("🪑 자리배치", use_container_width=True): 
+            st.session_state.page = "자리배치"; st.rerun()
+        if c3.button("📝 결석신고서 작성", use_container_width=True): 
+            st.session_state.page = "결석신고서 작성"; st.rerun()
         
+        c4, c5, c6 = st.columns(3)
+        if c4.button("📜 증명서 신청", use_container_width=True): 
+            st.session_state.page = "조퇴/외출/교내활동증 신청"; st.rerun()
+        if c5.button("🔐 비밀번호 변경", use_container_width=True): 
+            st.session_state.page = "비밀번호 변경"; st.rerun()
+        # c6는 디자인 정렬을 위해 비워둠 (필요 시 추가 가능)
+
+        # 👨‍🏫 교사용 행정 (교사/관리자 전용)
         if user['name'] in ["교사", "관리자"]:
             st.markdown("---")
             st.markdown("### 👨‍🏫 교사용 행정")
-            if st.button("🚩 출석체크", use_container_width=True): 
-                st.session_state.page = "[교사용]출석체크"
-                st.rerun()
-            if st.button("📁 결석계 다운로드", use_container_width=True): 
-                st.session_state.page = "[교사용]결석계 다운로드"
-                st.rerun()
+            tc1, tc2, tc3 = st.columns(3)
+            if tc1.button("🚩 출석체크", use_container_width=True): 
+                st.session_state.page = "[교사용]출석체크"; st.rerun()
+            if tc2.button("📁 결석계 다운로드", use_container_width=True): 
+                st.session_state.page = "[교사용]결석계 다운로드"; st.rerun()
+            if tc3.button("✅ 증명서 승인", use_container_width=True): 
+                st.session_state.page = "[교사용]증명서 승인"; st.rerun()
 
+    # 페이지 이동 로직
     elif st.session_state.page == "[교사용]출석체크": 
         attendance.show_page(conn)
     elif st.session_state.page == "[교사용]결석계 다운로드": 
         teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
+    elif st.session_state.page == "[교사용]증명서 승인":
+        issuance_admin.show_page(conn)
     elif st.session_state.page == "결석신고서 작성": 
         absence.show_page(conn, user, FIXED_INFO, PATHS)
     elif st.session_state.page == "시간표": 
@@ -167,5 +174,3 @@ else:
         seat.show_page(conn, user)
     elif st.session_state.page == "조퇴/외출/교내활동증 신청":
         issuance_user.show_page(conn, user, FIXED_INFO)
-    elif st.session_state.page == "[교사용]증명서 승인":
-        issuance_admin.show_page(conn)
