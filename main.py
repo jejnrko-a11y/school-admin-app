@@ -109,7 +109,7 @@ else:
     # 사이드바
     with st.sidebar:
         st.title(f"👤 {user['name']}님")
-        menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
+        menu_list = ["메인 홈", "결석신고서 작성", "시간표", "자리배치", "비밀번호 변경"]
         if user['name'] in ["교사", "관리자"]: 
             menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
         
@@ -130,8 +130,8 @@ else:
         
         st.markdown("### 🚀 바로가기")
         c1, c2 = st.columns(2)
-        if c1.button("📝 결석계 작성", use_container_width=True): 
-            st.session_state.page = "결석계 작성"
+        if c1.button("📝 결석신고서 작성", use_container_width=True): 
+            st.session_state.page = "결석신고서 작성"
             st.rerun()
         if c1.button("🪑 자리배치", use_container_width=True): 
             st.session_state.page = "자리배치"
@@ -157,7 +157,7 @@ else:
         attendance.show_page(conn)
     elif st.session_state.page == "교사용 결석계 확인": 
         teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
-    elif st.session_state.page == "결석계 작성": 
+    elif st.session_state.page == "결석신고서 작성": 
         absence.show_page(conn, user, FIXED_INFO, PATHS)
     elif st.session_state.page == "시간표": 
         timetable.show_page(conn)
