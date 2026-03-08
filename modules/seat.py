@@ -9,9 +9,43 @@ import pandas as pd
 # ==========================================
 st.set_page_config(page_title="경기기계공고 행정 시스템", layout="centered")
 
+# CSS: 상단 고정 네비게이션 및 디자인 (시간표 스타일 참고)
+st.markdown("""
+    <style>
+    /* 웹 화면 기본 설정 */
+    [data-testid="stHeader"], [data-testid="stDecoration"] { display: none !important; }
+    .block-container { padding-top: 0rem !important; padding-bottom: 2rem !important; }
+    hr { display: none !important; }
+
+    /* 상단 고정(Sticky) 뒤로가기 버튼 스타일 */
+    .sticky-nav {
+        position: sticky;
+        top: 0;
+        z-index: 1001;
+        background-color: white;
+        padding: 10px 0;
+    }
+    
+    /* 버튼 디자인: 네이비 블루 계열 */
+    div.stButton > button:first-child {
+        background-color: #2C3E50 !important;
+        color: white !important;
+        font-weight: bold !important;
+        border-radius: 8px !important;
+        border: none !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+        height: 3rem !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # 중요 정보 로드
-ADMIN_PASSWORD = st.secrets["auth"]["admin_password"] 
-FIXED_INFO = st.secrets["school_info"]
+try:
+    ADMIN_PASSWORD = st.secrets["auth"]["admin_password"] 
+    FIXED_INFO = st.secrets["school_info"]
+except:
+    st.error("Secrets 설정(auth/school_info)을 확인해주세요.")
+
 PATHS = {
     "font": "NanumGothic-Regular.ttf",
     "bold_font": "NanumGothic-Bold.ttf",
@@ -66,7 +100,6 @@ def login_page():
                     "num": 0 if str(user_data['번호']) == 'nan' else int(float(str(user_data['번호'])))
                 }
                 st.session_state.page = "메인 홈"
-                st.success(f"🔓 {name_only}님 인증 성공!")
                 st.rerun()
             else:
                 st.error("비밀번호가 틀렸습니다.")
@@ -85,26 +118,25 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # [요구사항] 메뉴 구성 변경
+    # [메뉴 구성]
     menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
     if user['name'] == "교사":
         menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
 
-    # 현재 세션 페이지 인덱스 동기화
-    try:
-        current_idx = menu_list.index(st.session_state.page)
-    except ValueError:
-        current_idx = 0
-        st.session_state.page = "메인 홈"
-
-    # 사이드바 (행정 메뉴 -> 메뉴)
+    # 사이드바 구성
     st.sidebar.title(f"👤 {user['name']}님")
     if user['name'] != "교사":
         st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
     
+    # 사이드바 메뉴 인덱스 동기화
+    try:
+        current_idx = menu_list.index(st.session_state.page)
+    except ValueError:
+        current_idx = 0
+
     selected_menu = st.sidebar.radio("메뉴", menu_list, index=current_idx)
     
-    # 사이드바 선택 시 상태 업데이트
+    # 사이드바 선택 시 상태 업데이트 (중복 호출 방지)
     if selected_menu != st.session_state.page:
         st.session_state.page = selected_menu
         st.rerun()
@@ -113,12 +145,13 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    # [뒤로가기 버튼]
+    # [뒤로가기 버튼] 상단 고정 영역 (메인 홈이 아닐 때만 표시)
     if st.session_state.page != "메인 홈":
-        if st.button("🔙 메인 홈으로 돌아가기", use_container_width=True):
+        st.markdown('<div class="sticky-nav">', unsafe_allow_html=True)
+        if st.button("⬅️ 메인 홈으로 돌아가기", use_container_width=True):
             st.session_state.page = "메인 홈"
             st.rerun()
-        st.divider()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # [페이지별 화면 출력 및 라우팅]
     if st.session_state.page == "메인 홈":
@@ -129,34 +162,27 @@ else:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("📝\n\n결석계 작성", use_container_width=True):
-                st.session_state.page = "결석계 작성"
-                st.rerun()
+                st.session_state.page = "결석계 작성"; st.rerun()
             if st.button("🪑\n\n자리배치", use_container_width=True):
-                st.session_state.page = "자리배치"
-                st.rerun()
+                st.session_state.page = "자리배치"; st.rerun()
         with col2:
             if st.button("📅\n\n시간표", use_container_width=True):
-                st.session_state.page = "시간표"
-                st.rerun()
+                st.session_state.page = "시간표"; st.rerun()
             if st.button("🔐\n\n비밀번호 변경", use_container_width=True):
-                st.session_state.page = "비밀번호 변경"
-                st.rerun()
+                st.session_state.page = "비밀번호 변경"; st.rerun()
         
-        # 교사용 추가 버튼 (홈 화면 아이콘 매칭)
         if user['name'] == "교사":
             st.markdown("---")
             st.markdown("### 👨‍🏫 교사용 행정")
             tc1, tc2 = st.columns(2)
             with tc1:
                 if st.button("🚩\n\n출석체크", use_container_width=True):
-                    st.session_state.page = "교사용 출석체크"
-                    st.rerun()
+                    st.session_state.page = "교사용 출석체크"; st.rerun()
             with tc2:
                 if st.button("📁\n\n결석계 확인", use_container_width=True):
-                    st.session_state.page = "교사용 결석계 확인"
-                    st.rerun()
+                    st.session_state.page = "교사용 결석계 확인"; st.rerun()
 
-    # --- 라우팅 분기점 (수정된 이름 기반) ---
+    # --- 라우팅 분기점 ---
     elif st.session_state.page == "교사용 출석체크":
         attendance.show_page(conn)
         
@@ -172,9 +198,5 @@ else:
     elif st.session_state.page == "비밀번호 변경":
         settings.show_page(conn, user)
         
-    elif st.session_state.page == "교사용 결석계 확인":
-        teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
-        
     elif st.session_state.page == "자리배치":
-        # 수정됨: seat 모듈의 show_page 호출
         seat.show_page(conn, user)
