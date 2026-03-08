@@ -7,7 +7,7 @@ import os
 from utils import get_kst
 
 def show_page(conn, user, fixed_info):
-    # 1. 인쇄 및 UI 최적화 CSS (들여쓰기 주의)
+    # 1. UI 및 인쇄 설정 CSS (들여쓰기 제거로 코드 블록 방지)
     st.markdown("""
 <style>
 [data-testid="stDataFrame"] { font-size: 12px !important; }
@@ -96,7 +96,6 @@ def show_page(conn, user, fixed_info):
                 with st.expander(f"{status_icon} [{row['상태']}] {row['신청일시']} - {row['종류']}"):
                     if row['상태'] == "승인":
                         st.success(f"✅ 승인완료 (번호: {row['일련번호']})")
-                        # '인쇄' 버튼 대신 '증명서 보기' 버튼만 활성화
                         if st.button("📄 증명서 보기", key=f"view_{idx}", use_container_width=True):
                             render_certificate(row, fixed_info)
                     elif row['상태'] == "반려":
@@ -105,7 +104,7 @@ def show_page(conn, user, fixed_info):
                         st.warning("⏳ 승인 대기 중입니다.")
 
 # ---------------------------------------------------------
-# 공식 양식 렌더링 함수 (통합 양식)
+# 공식 양식 렌더링 함수 (통합 양식 고도화)
 # ---------------------------------------------------------
 def render_certificate(row, fixed_info):
     # 1. 교사 직인 처리
@@ -115,22 +114,22 @@ def render_certificate(row, fixed_info):
             seal_b64 = base64.b64encode(f.read()).decode()
             seal_html = f'<img src="data:image/png;base64,{seal_b64}" style="position:absolute; width:46px; margin-left:-35px; margin-top:-10px; opacity:0.8; z-index:10;">'
 
-    # 2. 데이터 매핑 및 종류별 단어 변환
+    # 2. 데이터 매핑 및 명칭 설정
     dept = str(fixed_info.get('dept', '미상')).replace('.0', '')
     grade = str(fixed_info.get('grade', '0')).replace('.0', '')
     cls = str(fixed_info.get('cls', '0')).replace('.0', '')
     num = str(row['번호']).replace('.0', '')
     name = row['이름']
     
-    # 괄호 단어 및 확인 문구 설정
-    type_map = {
-        "조퇴증": "조 퇴 증",
-        "외출증": "외 출 증",
-        "교내활동증": "학생 교내 활동 확인"
+    # 종류별 제목 및 조사 매핑
+    type_info = {
+        "조퇴증": {"title": "조 퇴 증", "text": "조퇴를"},
+        "외출증": {"title": "외 출 증", "text": "외출을"},
+        "교내활동증": {"title": "학생 교내 활동 확인증", "text": "학생 교내 활동 확인을"}
     }
-    display_type = type_map.get(row['종류'], "확 인")
+    info = type_info.get(row['종류'], {"title": "확 인 증", "text": "사항을"})
     
-    # 시간 파싱 (조회~종례 등)
+    # 시간 파싱
     try:
         date_part = row['시간'].split(' ')[0] # "03/10"
         m, d = date_part.split('/')
@@ -139,37 +138,37 @@ def render_certificate(row, fixed_info):
     except:
         y, m, d, time_detail = "2026", "  ", "  ", row['시간']
 
-    # 3. HTML 양식 (이미지 양식 통일) - 들여쓰기 제거
+    # 3. HTML 양식 (요구사항 반영: 높이 통일, 괄호 제거, 조사 수정)
     full_html = f"""
 <div style="width:480px; margin:20px auto; border:2.5px solid black; padding:0; background:white; color:black; font-family:'Malgun Gothic', 'Dotum', sans-serif;">
-<div style="border-bottom:2px solid black; background-color:#D9E1F2; padding:10px; text-align:center;">
-<h2 style="margin:0; font-size:22px; letter-spacing:5px;">( {display_type} )</h2>
+<div style="border-bottom:2px solid black; background-color:#D9E1F2; padding:12px; text-align:center;">
+<h2 style="margin:0; font-size:22px; letter-spacing:5px;">{info['title']}</h2>
 </div>
-<div style="background-color:#E7E6E6; height:40px; border-bottom:1.5px solid black; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:bold; letter-spacing:1px;">
-{dept} &nbsp; {grade}학년 &nbsp; {cls}반 &nbsp; {num}번 &nbsp; 성명 : {name}
+<div style="background-color:#E7E6E6; height:45px; border-bottom:1.5px solid black; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:bold; letter-spacing:1px;">
+{dept}과 &nbsp; {grade}학년 &nbsp; {cls}반 &nbsp; {num}번 &nbsp; 성명 : {name}
 </div>
 <table style="width:100%; border-collapse:collapse;">
-<tr style="height:100px;">
+<tr style="height:60px;">
 <td style="width:18%; border:1px solid black; border-top:none; background:#f0f0f0; text-align:center; font-weight:bold; font-size:16px;">사 유</td>
-<td style="width:82%; border:1px solid black; border-top:none; padding:10px; text-align:left; vertical-align:top; font-size:16px;">{row['사유']}</td>
+<td style="width:82%; border:1px solid black; border-top:none; padding:10px; text-align:left; vertical-align:middle; font-size:16px;">{row['사유']}</td>
 </tr>
-<tr style="height:45px;">
+<tr style="height:60px;">
 <td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:16px;">장소</td>
-<td style="border:1px solid black; padding-left:15px; text-align:left; font-size:16px;">{row['행선지']}</td>
+<td style="border:1px solid black; padding-left:15px; text-align:left; vertical-align:middle; font-size:16px;">{row['행선지']}</td>
 </tr>
-<tr style="height:45px;">
+<tr style="height:60px;">
 <td style="border:1px solid black; background:#f0f0f0; text-align:center; font-weight:bold; font-size:16px;">시간</td>
-<td style="border:1px solid black; text-align:center; font-size:17px; letter-spacing:1px;">{time_detail}</td>
+<td style="border:1px solid black; text-align:center; vertical-align:middle; font-size:17px; letter-spacing:1px;">{time_detail}</td>
 </tr>
 </table>
-<div style="text-align:center; padding:30px 0 0 0;">
-<div style="font-size:18px; font-weight:bold; margin-bottom:25px;">상기학생의 ( {display_type} ) 을 확인함.</div>
-<div style="font-size:18px; margin-bottom:20px; letter-spacing:2px;">{y} 년 &nbsp;&nbsp;&nbsp; {m} 월 &nbsp;&nbsp;&nbsp; {d} 일</div>
-<div style="font-size:18px; font-weight:bold; margin-bottom:25px; position:relative;">
+<div style="text-align:center; padding:35px 0 0 0;">
+<div style="font-size:18px; font-weight:bold; margin-bottom:25px;">상기 학생의 {info['text']} 확인함.</div>
+<div style="font-size:18px; margin-bottom:22px; letter-spacing:2px;">{y} 년 &nbsp;&nbsp;&nbsp; {m} 월 &nbsp;&nbsp;&nbsp; {d} 일</div>
+<div style="font-size:18px; font-weight:bold; margin-bottom:28px; position:relative;">
 담당교사 : &nbsp;&nbsp; 오 정 은 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (인)
 {seal_html}
 </div>
-<div style="border-top:2px solid black; padding:12px 0; font-size:22px; font-weight:bold; letter-spacing:6px; background-color:white;">
+<div style="border-top:2px solid black; padding:15px 0; font-size:24px; font-weight:bold; letter-spacing:6px; background-color:white;">
 경 기 기 계 공 업 고 등 학 교
 </div>
 </div>
@@ -179,5 +178,5 @@ def render_certificate(row, fixed_info):
     st.markdown("### 🖨️ 증명서 미리보기")
     st.markdown(full_html, unsafe_allow_html=True)
     
-    # 보기 버튼 클릭 시 브라우저 인쇄창 호출 (선택 사항)
+    # 브라우저 인쇄창 호출
     components.html(f"<script>window.parent.print();</script>", height=0)
