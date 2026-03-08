@@ -25,15 +25,12 @@ except Exception as e:
 
 # 동적 학급 정보 로드
 FIXED_INFO = load_class_info(conn)
-
-# [수정됨] 로그인 함수 내부가 아닌, 글로벌 영역에서 소수점을 제거한 변수를 정의합니다.
-# 이렇게 하면 로그인 페이지뿐만 아니라 사이드바 등 앱 전체에서 에러 없이 사용할 수 있습니다.
 dept_str = str(FIXED_INFO['dept']).replace('.0', '')
 grade_str = str(FIXED_INFO['grade']).replace('.0', '')
 cls_str = str(FIXED_INFO['cls']).replace('.0', '')
 
 # ==========================================
-# 2. 로그인 페이지 (모든 사용자 포함 로드)
+# 2. 로그인 페이지
 # ==========================================
 def login_page():
     st.markdown(
@@ -41,14 +38,13 @@ def login_page():
         unsafe_allow_html=True
     )
     
-    # 로그인 시에는 교사를 포함해야 하므로 exclude_admins=False
     df_all_users = load_student_list(conn, exclude_admins=False)
     
     if df_all_users.empty:
         st.error("⚠️ 학생 명부를 불러오지 못했습니다. 잠시 후 새로고침 해주세요.")
         return
 
-    student_options =[]
+    student_options = []
     for _, row in df_all_users.iterrows():
         name = str(row['이름']).strip()
         num_raw = str(row['번호']).replace('.0', '')
@@ -73,7 +69,6 @@ def login_page():
                     "num": 0 if str(user_data['번호']) == 'nan' else int(float(str(user_data['번호'])))
                 }
                 st.session_state.page = "메인 홈"
-                st.success(f"🔓 {name_only}님 인증 성공!")
                 st.rerun()
             else:
                 st.error("비밀번호가 틀렸습니다.")
@@ -83,7 +78,6 @@ def login_page():
 # ==========================================
 if 'login_info' not in st.session_state:
     st.session_state.login_info = None
-
 if 'page' not in st.session_state:
     st.session_state.page = "메인 홈"
 
@@ -92,20 +86,31 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    menu_list =["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
+    # [고정 버튼 CSS]
+    st.markdown("""
+        <style>
+        .fixed-home-btn {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 9999;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
     if user['name'] in ["교사", "관리자"]:
-        menu_list +=["교사용 출석체크", "교사용 결석계 확인"]
+        menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
 
     try:
         current_idx = menu_list.index(st.session_state.page)
-    except ValueError:
+    except:
         current_idx = 0
         st.session_state.page = "메인 홈"
 
-    # 사이드바 
+    # 사이드바
     st.sidebar.title(f"👤 {grade_str}학년 {cls_str}반 {user['name']}님")
     if user['name'] not in ["교사", "관리자", "테스트계정"]:
-        # [수정됨] 하단 정보도 3.0-2.0 형태가 되지 않도록 정리된 변수를 사용합니다.
         st.sidebar.write(f"{grade_str}-{cls_str} {user['num']}번")
     
     selected_menu = st.sidebar.radio("메뉴", menu_list, index=current_idx)
@@ -118,63 +123,49 @@ else:
         st.session_state.clear()
         st.rerun()
 
+    # [고정 홈 버튼]
     if st.session_state.page != "메인 홈":
-        if st.button("🔙 메인 홈으로 돌아가기", use_container_width=True):
+        st.markdown('<div class="fixed-home-btn">', unsafe_allow_html=True)
+        if st.button("⬅️ 홈"):
             st.session_state.page = "메인 홈"
             st.rerun()
-        st.divider()
+        st.markdown('</div>', unsafe_allow_html=True)
+        # 상단 버튼이 내용을 가리지 않도록 여백
+        st.write("") 
 
-# 페이지별 라우팅
+    # 페이지 라우팅
     if st.session_state.page == "메인 홈":
-        # [수정됨] st.title 대신 style 속성을 가진 h1 태그를 사용하여 크기를 80%로 조절
-        st.markdown(
-            f"<h1 style='font-size: 2.0rem;'>👋 {grade_str}학년 {cls_str}반 {user['name']}님</h1>", 
-            unsafe_allow_html=True
-        )
+        st.markdown(f"<h1 style='font-size: 2.0rem;'>👋 {grade_str}학년 {cls_str}반 {user['name']}님</h1>", unsafe_allow_html=True)
         now = get_kst()
         st.markdown(f"📅 {now.year}년 {now.month}월 {now.day}일<br>현재시간 : **{now.strftime('%H시 %M분')}**", unsafe_allow_html=True)
         
-        # ... 이하 바로가기 코드 동일
         st.markdown("### 🚀 바로가기")
-        # ... 이하 동일
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📝\n\n결석계 작성", use_container_width=True):
-                st.session_state.page = "결석계 작성"
-                st.rerun()
-            if st.button("🪑\n\n자리배치", use_container_width=True):
-                st.session_state.page = "자리배치"
-                st.rerun()
+            if st.button("📝 결석계 작성", use_container_width=True):
+                st.session_state.page = "결석계 작성"; st.rerun()
+            if st.button("🪑 자리배치", use_container_width=True):
+                st.session_state.page = "자리배치"; st.rerun()
         with col2:
-            if st.button("📅\n\n시간표", use_container_width=True):
-                st.session_state.page = "시간표"
-                st.rerun()
-            if st.button("🔐\n\n비밀번호 변경", use_container_width=True):
-                st.session_state.page = "비밀번호 변경"
-                st.rerun()
+            if st.button("📅 시간표", use_container_width=True):
+                st.session_state.page = "시간표"; st.rerun()
+            if st.button("🔐 비밀번호 변경", use_container_width=True):
+                st.session_state.page = "비밀번호 변경"; st.rerun()
         
-        if user['name'] in["교사", "관리자"]:
+        if user['name'] in ["교사", "관리자"]:
             st.markdown("---")
             st.markdown("### 👨‍🏫 교사용 행정")
             tc1, tc2 = st.columns(2)
             with tc1:
-                if st.button("🚩\n\n출석체크", use_container_width=True):
-                    st.session_state.page = "교사용 출석체크"
-                    st.rerun()
+                if st.button("🚩 출석체크", use_container_width=True):
+                    st.session_state.page = "교사용 출석체크"; st.rerun()
             with tc2:
-                if st.button("📁\n\n결석계 확인", use_container_width=True):
-                    st.session_state.page = "교사용 결석계 확인"
-                    st.rerun()
+                if st.button("📁 결석계 확인", use_container_width=True):
+                    st.session_state.page = "교사용 결석계 확인"; st.rerun()
 
-    elif st.session_state.page == "교사용 출석체크":
-        attendance.show_page(conn)
-    elif st.session_state.page == "교사용 결석계 확인":
-        teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
-    elif st.session_state.page == "결석계 작성":
-        absence.show_page(conn, user, FIXED_INFO, PATHS)
-    elif st.session_state.page == "시간표":
-        timetable.show_page(conn)
-    elif st.session_state.page == "비밀번호 변경":
-        settings.show_page(conn, user)
-    elif st.session_state.page == "자리배치":
-        seat.show_page(conn, user)
+    elif st.session_state.page == "교사용 출석체크": attendance.show_page(conn)
+    elif st.session_state.page == "교사용 결석계 확인": teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
+    elif st.session_state.page == "결석계 작성": absence.show_page(conn, user, FIXED_INFO, PATHS)
+    elif st.session_state.page == "시간표": timetable.show_page(conn)
+    elif st.session_state.page == "비밀번호 변경": settings.show_page(conn, user)
+    elif st.session_state.page == "자리배치": seat.show_page(conn, user)
