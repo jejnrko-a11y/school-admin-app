@@ -85,11 +85,6 @@ def show_page(conn, user):
         </style>
     """, unsafe_allow_html=True)
 
-    # --- 2. [홈 버튼] 시간표 스타일 (Sticky 제거, 일반 버튼 형식) ---
-    if st.button("⬅️ BACK 메인 홈으로 돌아가기", key="back_to_home_seat"):
-        st.session_state.page = "메인 홈"
-        st.rerun()
-
     # --- 3. [제목 및 부제목] 시간표 디자인과 동일하게 적용 ---
     st.markdown('<div class="print-area">', unsafe_allow_html=True)
     st.title("🪑 학급 자리배치")
