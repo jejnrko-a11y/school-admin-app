@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import random
+import math
+from utils import load_student_list
 
 def show_page(conn, user):
     st.title("🪑 지능형 조건부 자리배치")
@@ -31,43 +33,46 @@ def show_page(conn, user):
         </style>
     """, unsafe_allow_html=True)
 
-    # --- 2. 데이터 로드 ---
+    # --- 2. 동적 데이터 로드 및 그리드 계산 ---
     try:
         df_seat = conn.read(worksheet="자리배치", ttl=0)
-        df_students = conn.read(worksheet="학생명부", ttl=0)
-        df_students = df_students[df_students['이름'] != '교사'].copy()
-        df_students['번호'] = pd.to_numeric(df_students['번호'], errors='coerce').fillna(0).astype(int)
-        df_students = df_students.sort_values(by='번호')
+        
+        # utils.py의 동적 함수 사용 (교사/테스트계정 등 자동 제외)
+        df_students = load_student_list(conn, exclude_admins=True)
         all_students = [f"{row['이름']}({row['번호']}번)" for _, row in df_students.iterrows()]
+        
+        total_students = len(all_students)
+        if total_students == 0:
+            st.warning("학생 데이터가 없습니다.")
+            return
+            
+        # [핵심] 학생 수에 따른 행(Row) 개수 동적 계산 (가로 5분단 고정)
+        columns_count = 5
+        rows_count = math.ceil(total_students / columns_count)
+        
     except Exception as e:
         st.error(f"데이터 로드 오류: {e}")
         return
 
-    # 고정석 (기존에 설정된 뒷자리 빈 공간 등)
-    fixed_x_coords = [(2, 4), (3, 4)] # E4, E5 (3행, 4행 5분단)
-
     # --- 3. 교사 전용 조건 설정 폼 ---
-    fb_pairs =[] # 앞뒤 짝궁 리스트
-    ss_pairs =[] # 양옆 짝궁 리스트
+    fb_pairs =[] 
+    ss_pairs =[] 
     cond_sep, cond_front, cond_back, cond_win, cond_hall = [], [], [], [],[]
     cond_fixed_br = "선택 안함"
     
     if user['name'] == "교사":
         with st.expander("⚙️ 특별 자리배치 조건 설정 (셔플 시 적용)"):
-            st.info("💡 각 짝궁은 2명씩 선택해 주세요. (최대 3커플씩 가능)")
+            st.info(f"💡 현재 학생 수는 총 {total_students}명이며, 자동으로 {rows_count}줄로 배치됩니다.")
             
-            # [추가됨] 우측 맨 앞(교탁 옆) 고정 학생 지정
             st.markdown('<p class="cond-label">🎯 교탁 옆 VIP석 (우측 맨 앞자리)</p>', unsafe_allow_html=True)
             cond_fixed_br = st.selectbox("해당 학생은 무조건 교탁 우측(0행 4열)에 배치됩니다.", ["선택 안함"] + all_students)
 
-            # 앞뒤 짝궁 (세로 인접)
             st.markdown('<p class="cond-label">↕️ 앞뒤 짝궁 지정 (세로로 인접)</p>', unsafe_allow_html=True)
             cols_fb = st.columns(3)
             for i in range(3):
                 p = cols_fb[i].multiselect(f"앞뒤 커플 {i+1}", all_students, max_selections=2, key=f"fb_{i}")
                 if len(p) == 2: fb_pairs.append(p)
 
-            # 양옆 짝궁 (가로 인접)
             st.markdown('<p class="cond-label">↔️ 양옆 짝궁 지정 (가로로 인접)</p>', unsafe_allow_html=True)
             cols_ss = st.columns(3)
             for i in range(3):
@@ -77,7 +82,7 @@ def show_page(conn, user):
             st.markdown('<p class="cond-label">🚫 기타 배치 조건</p>', unsafe_allow_html=True)
             cond_sep = st.multiselect("💢 분리 지정 (절대 인접 불가)", all_students)
             cond_front = st.multiselect("📏 앞자리 지정 (1열)", all_students)
-            cond_back = st.multiselect("📺 뒷자리 지정 (4열)", all_students)
+            cond_back = st.multiselect(f"📺 뒷자리 지정 ({rows_count}열)", all_students)
             cond_win = st.multiselect("🪟 창가 지정 (1분단)", all_students)
             cond_hall = st.multiselect("🚪 복도 지정 (5분단)", all_students)
 
@@ -92,46 +97,49 @@ def show_page(conn, user):
                     for attempt in range(max_attempts):
                         shuffled = all_students.copy()
                         
-                        # [핵심 로직] 고정석 학생을 셔플 목록에서 미리 제외
+                        # 고정석 학생 셔플에서 제외
                         if cond_fixed_br != "선택 안함" and cond_fixed_br in shuffled:
                             shuffled.remove(cond_fixed_br)
                         
                         random.shuffle(shuffled)
                         
-                        temp_grid = [["" for _ in range(5)] for _ in range(4)]
+                        # 동적 그리드 생성
+                        temp_grid = [["" for _ in range(columns_count)] for _ in range(rows_count)]
                         s_map = {}
                         s_idx = 0
                         
-                        for r in range(4):
-                            for c in range(5):
-                                if (r, c) in fixed_x_coords:
-                                    temp_grid[r][c] = "X"
-                                # [핵심 로직] 0행 4열(우측 앞자리)에 고정 학생 최우선 할당
-                                elif cond_fixed_br != "선택 안함" and r == 0 and c == 4:
+                        for r in range(rows_count):
+                            for c in range(columns_count):
+                                # 우선순위 1: 고정석 (0행 4열)
+                                if cond_fixed_br != "선택 안함" and r == 0 and c == columns_count - 1:
                                     temp_grid[r][c] = cond_fixed_br
-                                    s_map[cond_fixed_br] = (0, 4)
+                                    s_map[cond_fixed_br] = (0, c)
+                                # 우선순위 2: 셔플된 학생 배치
                                 elif s_idx < len(shuffled):
                                     name = shuffled[s_idx]
                                     temp_grid[r][c] = name
                                     s_map[name] = (r, c)
                                     s_idx += 1
+                                # 우선순위 3: 학생 수가 그리드보다 작을 때 남는 자리는 "X"
+                                else:
+                                    temp_grid[r][c] = "X"
                         
                         valid = True
                         
-                        # 검증 1: 앞뒤 짝궁 (같은 열, 행 차이 1)
+                        # 검증 1: 앞뒤 짝궁
                         for p in fb_pairs:
                             pos1, pos2 = s_map[p[0]], s_map[p[1]]
                             if not (pos1[1] == pos2[1] and abs(pos1[0] - pos2[0]) == 1):
                                 valid = False; break
                         
-                        # 검증 2: 양옆 짝궁 (같은 행, 열 차이 1)
+                        # 검증 2: 양옆 짝궁
                         if valid:
                             for p in ss_pairs:
                                 pos1, pos2 = s_map[p[0]], s_map[p[1]]
                                 if not (pos1[0] == pos2[0] and abs(pos1[1] - pos2[1]) == 1):
                                     valid = False; break
 
-                        # 검증 3: 분리 (상하좌우 인접 불가)
+                        # 검증 3: 분리
                         if valid and cond_sep and len(cond_sep) > 1:
                             for i in range(len(cond_sep)):
                                 for j in range(i + 1, len(cond_sep)):
@@ -140,9 +148,9 @@ def show_page(conn, user):
                                         valid = False; break
                                 if not valid: break
 
-                        # 나머지 조건 검증
+                        # 검증 4: 기타 위치
                         if valid and cond_front and any(s_map[n][0] != 0 for n in cond_front): valid = False
-                        if valid and cond_back and any(s_map[n][0] != 3 for n in cond_back): valid = False
+                        if valid and cond_back and any(s_map[n][0] != rows_count - 1 for n in cond_back): valid = False
                         if valid and cond_win and any(s_map[n][1] != 0 for n in cond_win): valid = False
                         if valid and cond_hall and any(s_map[n][1] != 4 for n in cond_hall): valid = False
                         
@@ -160,14 +168,16 @@ def show_page(conn, user):
         with c2:
             if st.button("🔢 번호순(1분단부터)", use_container_width=True):
                 ordered = all_students.copy()
-                new_grid = [["" for _ in range(5)] for _ in range(4)]
+                new_grid = [["" for _ in range(columns_count)] for _ in range(rows_count)]
                 s_idx = 0
-                for c in range(5):
-                    for r in range(4):
-                        if (r, c) in fixed_x_coords: new_grid[r][c] = "X"
-                        elif s_idx < len(ordered):
+                for c in range(columns_count):
+                    for r in range(rows_count):
+                        if s_idx < len(ordered):
                             new_grid[r][c] = ordered[s_idx]
                             s_idx += 1
+                        else:
+                            new_grid[r][c] = "X"
+                            
                 new_df = pd.DataFrame(new_grid, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
                 conn.update(worksheet="자리배치", data=new_df)
                 st.rerun()
@@ -175,11 +185,15 @@ def show_page(conn, user):
     # --- 4. 시각적 출력 ---
     st.markdown("<h4 style='text-align: center; color: #555;'>뒷자리 (Back)</h4>", unsafe_allow_html=True)
 
-    # [수정됨] 시각적 역순 출력: 3행(뒷자리)부터 0행(앞자리) 순으로 렌더링
-    for r in range(3, -1, -1):
-        cols = st.columns(5)
-        for c in range(5):
-            val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
+    # UI 역순 렌더링: (최대 행 - 1) 부터 0행까지 거꾸로
+    for r in range(rows_count - 1, -1, -1):
+        cols = st.columns(columns_count)
+        for c in range(columns_count):
+            try:
+                val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
+            except IndexError:
+                val = ""
+                
             with cols[c]:
                 if val == "X":
                     st.markdown('<div class="seat-card" style="background-color:#f0f0f0;"><div class="seat-x">X</div></div>', unsafe_allow_html=True)
@@ -188,6 +202,5 @@ def show_page(conn, user):
                 else:
                     st.markdown('<div class="seat-card" style="border:1px dashed #ccc;"></div>', unsafe_allow_html=True)
 
-    # [수정됨] 칠판과 교탁을 UI 최하단으로 이동
     st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
     st.markdown('<div class="blackboard">칠 판 (Front)</div>', unsafe_allow_html=True)
