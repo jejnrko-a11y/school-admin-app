@@ -63,7 +63,7 @@ def login_page():
                     "name": name_only, 
                     "num": 0 if str(user_data['번호']) == 'nan' else int(float(str(user_data['번호'])))
                 }
-                st.session_state.page = "메인 홈"
+                st.session_state.page = "홈"
                 st.success(f"🔓 {name_only}님 인증 성공!")
                 st.rerun()
             else:
@@ -76,14 +76,14 @@ if 'login_info' not in st.session_state:
     st.session_state.login_info = None
 
 if 'page' not in st.session_state:
-    st.session_state.page = "메인 홈"
+    st.session_state.page = "홈"
 
 if st.session_state.login_info is None:
     login_page()
 else:
     user = st.session_state.login_info
     
-    menu_list =["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
+    menu_list =["홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
     if user['name'] in ["교사", "관리자"]:
         menu_list +=["교사용 출석체크", "교사용 결석계 확인"]
 
@@ -91,7 +91,7 @@ else:
         current_idx = menu_list.index(st.session_state.page)
     except ValueError:
         current_idx = 0
-        st.session_state.page = "메인 홈"
+        st.session_state.page = "홈"
 
     # 사이드바 
     st.sidebar.title(f"👤 {user['name']}님")
@@ -108,14 +108,14 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    if st.session_state.page != "메인 홈":
-        if st.button("🔙 메인 홈으로 돌아가기", use_container_width=True):
-            st.session_state.page = "메인 홈"
+    if st.session_state.page != "홈":
+        if st.button("🔙 홈으로 돌아가기", use_container_width=True):
+            st.session_state.page = "홈"
             st.rerun()
         st.divider()
 
     # 페이지별 라우팅
-    if st.session_state.page == "메인 홈":
+    if st.session_state.page == "홈":
         st.title(f"👋 {user['name']}님!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%H:%M')}")
         
