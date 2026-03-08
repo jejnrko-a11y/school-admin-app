@@ -109,7 +109,7 @@ else:
     # 사이드바
     with st.sidebar:
         st.title(f"👤 {user['name']}님")
-        menu_list = ["메인 홈", "시간표", "자리배치", "결석신고서 작성", "증명서 신청/내역", "비밀번호 변경"]
+        menu_list = ["메인 홈", "시간표", "자리배치", "결석신고서 작성", "조퇴/외출/교내활동증 신청", "비밀번호 변경"]
         if user['name'] in ["교사", "관리자"]: 
             menu_list += ["[교사용]출석체크", "[교사용]결석계 다운로드", "[교사용]증명서 승인"]
         
@@ -165,7 +165,7 @@ else:
         settings.show_page(conn, user)
     elif st.session_state.page == "자리배치": 
         seat.show_page(conn, user)
-    elif st.session_state.page == "증명서 신청/내역":
+    elif st.session_state.page == "조퇴/외출/교내활동증 신청":
         issuance_user.show_page(conn, user, FIXED_INFO)
     elif st.session_state.page == "[교사용]증명서 승인":
         issuance_admin.show_page(conn)
