@@ -43,28 +43,39 @@ def show_page(conn, user):
 
         /* --- 🖨️ 인쇄 전용(Print) 디자인 --- */
         @media print {
-            /* A4 가로 방향 설정 */
-            @page { size: A4 landscape; margin: 15mm; }
+            @page { size: A4 landscape; margin: 10mm; }
             
-            /* 불필요한 Streamlit UI 요소 및 교사 메뉴 숨기기 */
+            /* UI 요소 및 숨겨진 컨테이너들의 공백까지 완벽히 제거 */
             header, [data-testid="stSidebar"], .stButton, [data-testid="stExpander"], iframe { 
                 display: none !important; 
             }
             .sticky-marker, .fixed-header-bg { display: none !important; }
             
+            /* Streamlit의 수직 블록 간 여백(gap) 강제 제거 (공백 문제의 핵심) */
+            [data-testid="stVerticalBlock"] { gap: 0rem !important; }
+            div.element-container { margin-bottom: 0 !important; }
+            
             /* 본문 여백 제거 및 가로 꽉 차게 */
             [data-testid="stMainBlockContainer"] {
                 padding: 0 !important;
+                padding-top: 20px !important;
                 max-width: 100% !important;
             }
             
-            /* 자리 카드 테두리 및 그림자 인쇄 최적화 */
+            /* 한 장에 들어가도록 자리 카드와 칠판의 마진/크기 축소 */
             .seat-card {
                 border: 2px solid #000 !important;
                 box-shadow: none !important;
+                margin-bottom: 8px !important;
+                min-height: 70px !important; /* 높이 약간 축소 */
                 break-inside: avoid;
             }
-            .blackboard { border: 4px solid #000 !important; }
+            .teacher-desk { margin: 15px auto 5px auto !important; }
+            .blackboard { 
+                border: 4px solid #000 !important; 
+                padding: 10px !important; 
+                margin-top: 5px !important;
+            }
         }
         </style>
     """, unsafe_allow_html=True)
@@ -122,7 +133,7 @@ def show_page(conn, user):
             cond_win = st.multiselect("🪟 창가 지정 (1분단)", all_students)
             cond_hall = st.multiselect("🚪 복도 지정 (5분단)", all_students)
 
-        # 컨트롤 버튼 영역 (3등분 하여 인쇄 버튼 추가)
+        # 컨트롤 버튼 영역
         c1, c2, c3 = st.columns([2, 2, 1.5])
         
         with c1:
@@ -134,49 +145,41 @@ def show_page(conn, user):
                     for attempt in range(max_attempts):
                         shuffled = all_students.copy()
                         
-                        # 고정석 학생 셔플에서 제외
                         if cond_fixed_br != "선택 안함" and cond_fixed_br in shuffled:
                             shuffled.remove(cond_fixed_br)
                         
                         random.shuffle(shuffled)
                         
-                        # 동적 그리드 생성
                         temp_grid = [["" for _ in range(columns_count)] for _ in range(rows_count)]
                         s_map = {}
                         s_idx = 0
                         
                         for r in range(rows_count):
                             for c in range(columns_count):
-                                # 우선순위 1: 고정석 (0행 4열)
                                 if cond_fixed_br != "선택 안함" and r == 0 and c == columns_count - 1:
                                     temp_grid[r][c] = cond_fixed_br
                                     s_map[cond_fixed_br] = (0, c)
-                                # 우선순위 2: 셔플된 학생 배치
                                 elif s_idx < len(shuffled):
                                     name = shuffled[s_idx]
                                     temp_grid[r][c] = name
                                     s_map[name] = (r, c)
                                     s_idx += 1
-                                # 우선순위 3: 학생 수가 그리드보다 작을 때 남는 자리는 "X"
                                 else:
                                     temp_grid[r][c] = "X"
                         
                         valid = True
                         
-                        # 검증 1: 앞뒤 짝궁
                         for p in fb_pairs:
                             pos1, pos2 = s_map[p[0]], s_map[p[1]]
                             if not (pos1[1] == pos2[1] and abs(pos1[0] - pos2[0]) == 1):
                                 valid = False; break
                         
-                        # 검증 2: 양옆 짝궁
                         if valid:
                             for p in ss_pairs:
                                 pos1, pos2 = s_map[p[0]], s_map[p[1]]
                                 if not (pos1[0] == pos2[0] and abs(pos1[1] - pos2[1]) == 1):
                                     valid = False; break
 
-                        # 검증 3: 분리
                         if valid and cond_sep and len(cond_sep) > 1:
                             for i in range(len(cond_sep)):
                                 for j in range(i + 1, len(cond_sep)):
@@ -185,7 +188,6 @@ def show_page(conn, user):
                                         valid = False; break
                                 if not valid: break
 
-                        # 검증 4: 기타 위치
                         if valid and cond_front and any(s_map[n][0] != 0 for n in cond_front): valid = False
                         if valid and cond_back and any(s_map[n][0] != rows_count - 1 for n in cond_back): valid = False
                         if valid and cond_win and any(s_map[n][1] != 0 for n in cond_win): valid = False
@@ -208,7 +210,6 @@ def show_page(conn, user):
                 new_grid = [["" for _ in range(columns_count)] for _ in range(rows_count)]
                 s_idx = 0
                 
-                # [수정됨] 오른쪽 맨 앞(r=0, c=4)부터 뒤로 채우고, 끝나면 왼쪽 열(c=3,2,1,0)로 넘어감
                 for c in range(columns_count - 1, -1, -1):
                     for r in range(rows_count):
                         if s_idx < len(ordered):
@@ -222,21 +223,24 @@ def show_page(conn, user):
                 st.rerun()
                 
         with c3:
-            # HTML/JS를 이용한 브라우저 자체 인쇄 기능 트리거
+            # iframe의 여백을 없애고 Streamlit 기본 버튼과 완벽하게 똑같이 보이도록 CSS 조정
             components.html("""
-                <script>
-                    function triggerPrint() {
-                        window.parent.print();
+                <style>
+                    body { margin: 0; padding: 0; display: flex; align-items: flex-start; }
+                    button {
+                        width: 100%; height: 41px; margin-top: 1px;
+                        background-color: white; border: 1px solid rgba(49, 51, 63, 0.2);
+                        border-radius: 0.5rem; font-family: "Source Sans Pro", sans-serif;
+                        font-size: 1rem; font-weight: 400; color: #31333F;
+                        cursor: pointer; transition: border-color 0.2s, color 0.2s;
+                        display: flex; align-items: center; justify-content: center;
                     }
-                </script>
-                <button onclick="triggerPrint()" style="
-                    width: 100%; height: 38px;
-                    background-color: #f0f2f6; border: 1px solid #d0d4dc;
-                    border-radius: 8px; font-family: sans-serif;
-                    font-size: 15px; font-weight: 600; color: #31333F;
-                    cursor: pointer; display: flex; align-items: center; justify-content: center;
-                ">🖨️ 인쇄하기</button>
-            """, height=40)
+                    button:hover {
+                        border-color: #ff4b4b; color: #ff4b4b;
+                    }
+                </style>
+                <button onclick="window.parent.print()">🖨️ 인쇄하기</button>
+            """, height=45)
 
     # --- 5. 시각적 출력 (자리배치 렌더링) ---
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True) # 위 여백
