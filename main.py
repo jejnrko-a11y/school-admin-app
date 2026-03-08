@@ -30,8 +30,16 @@ FIXED_INFO = load_class_info(conn)
 # 2. 로그인 페이지 (모든 사용자 포함 로드)
 # ==========================================
 def login_page():
-    # [수정됨] 학과, 학년, 반 정보를 모두 가져와서 타이틀에 동적으로 표시합니다.
-    st.title(f"🏫 경기기공 {FIXED_INFO['dept']} {FIXED_INFO['grade']}학년 {FIXED_INFO['cls']}반 인증")
+    # [수정됨] 시트에서 불러온 숫자형 데이터의 소수점(.0)을 제거하여 깔끔하게 만듭니다.
+    dept_str = str(FIXED_INFO['dept'])
+    grade_str = str(FIXED_INFO['grade']).replace('.0', '')
+    cls_str = str(FIXED_INFO['cls']).replace('.0', '')
+    
+    #[수정됨] st.title 대신 HTML 태그를 사용해 폰트 사이즈를 기존의 70% 수준(약 1.8rem)으로 줄였습니다.
+    st.markdown(
+        f"<h1 style='font-size: 1.8rem; margin-bottom: 15px;'>🏫 경기기공 {dept_str} {grade_str}학년 {cls_str}반 인증</h1>", 
+        unsafe_allow_html=True
+    )
     
     # 로그인 시에는 교사를 포함해야 하므로 exclude_admins=False
     df_all_users = load_student_list(conn, exclude_admins=False)
@@ -117,6 +125,7 @@ else:
 
     # 페이지별 라우팅
     if st.session_state.page == "메인 홈":
+        # 메인 홈 타이틀 유지 (일반적인 크기)
         st.title(f"👋 {user['name']}님!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%H:%M')}")
         
