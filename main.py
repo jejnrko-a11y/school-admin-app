@@ -85,7 +85,47 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # [요구사항] 메뉴 구성 변경
+    # 1. 스타일 설정 (상단 고정 네비게이션 및 버튼 디자인)
+    st.markdown("""
+        <style>
+        /* 1. 상단 고정 바 스타일 */
+        [data-testid="stVerticalBlock"] > div:has(div.sticky-nav) {
+            position: sticky;
+            top: 2.8rem;
+            z-index: 999;
+            background-color: white;
+            padding-bottom: 10px;
+        }
+
+        /* 2. 뒤로가기 버튼 커스텀 디자인 */
+        div.stButton > button:has(div[p='🔙 메인 홈으로 돌아가기']), 
+        div.stButton > button:contains('🔙') {
+            background-color: #1E3A8A !important;
+            color: white !important;
+            font-weight: bold !important;
+            border-radius: 10px !important;
+            border: none !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2) !important;
+            height: 2.5rem !important;
+            transition: all 0.3s ease;
+        }
+        
+        div.stButton > button:has(div[p='🔙 메인 홈으로 돌아가기']):hover,
+        div.stButton > button:contains('🔙'):hover {
+            background-color: #152a63 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 8px rgba(0,0,0,0.25) !important;
+        }
+
+        /* 3. 구분선 간격 조절 */
+        hr {
+            margin-top: 0.5rem !important;
+            margin-bottom: 1rem !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # 2. 메뉴 구성
     menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
     if user['name'] == "교사":
         menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
@@ -97,14 +137,13 @@ else:
         current_idx = 0
         st.session_state.page = "메인 홈"
 
-    # 사이드바 (행정 메뉴 -> 메뉴)
+    # 사이드바
     st.sidebar.title(f"👤 {user['name']}님")
     if user['name'] != "교사":
         st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
     
     selected_menu = st.sidebar.radio("메뉴", menu_list, index=current_idx)
     
-    # 사이드바 선택 시 상태 업데이트
     if selected_menu != st.session_state.page:
         st.session_state.page = selected_menu
         st.rerun()
@@ -113,14 +152,15 @@ else:
         st.session_state.clear()
         st.rerun()
 
-    # [뒤로가기 버튼]
+    # 3. [상단 고정 뒤로가기 버튼] 메인 홈이 아닐 때만 표시
     if st.session_state.page != "메인 홈":
+        st.markdown('<div class="sticky-nav"></div>', unsafe_allow_html=True)
         if st.button("🔙 메인 홈으로 돌아가기", use_container_width=True):
             st.session_state.page = "메인 홈"
             st.rerun()
         st.divider()
 
-    # [페이지별 화면 출력 및 라우팅]
+    # 4. [페이지별 화면 출력 및 라우팅]
     if st.session_state.page == "메인 홈":
         st.title(f"👋 {user['name']}님!")
         st.write(f"현재 시간(KST): {get_kst().strftime('%H:%M')}")
@@ -142,7 +182,6 @@ else:
                 st.session_state.page = "비밀번호 변경"
                 st.rerun()
         
-        # 교사용 추가 버튼 (홈 화면 아이콘 매칭)
         if user['name'] == "교사":
             st.markdown("---")
             st.markdown("### 👨‍🏫 교사용 행정")
@@ -156,7 +195,7 @@ else:
                     st.session_state.page = "교사용 결석계 확인"
                     st.rerun()
 
-    # --- 라우팅 분기점 (수정된 이름 기반) ---
+    # --- 라우팅 분기점 ---
     elif st.session_state.page == "교사용 출석체크":
         attendance.show_page(conn)
         
@@ -172,9 +211,5 @@ else:
     elif st.session_state.page == "비밀번호 변경":
         settings.show_page(conn, user)
         
-    elif st.session_state.page == "교사용 결석계 확인":
-        teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
-        
     elif st.session_state.page == "자리배치":
-        # 수정됨: seat 모듈의 show_page 호출
         seat.show_page(conn, user)
