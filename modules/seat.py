@@ -66,7 +66,7 @@ def show_page(conn, user):
                 padding-top: 0 !important;
                 margin-top: 0 !important; 
                 max-width: 100% !important;
-                zoom: 0.82 !important; /* 카드가 커진 만큼 한 장에 잘 들어가도록 배율 살짝 조정 */
+                zoom: 0.82 !important; 
             }
             
             div[data-testid="stHeadingWithActionElements"] {
@@ -77,24 +77,22 @@ def show_page(conn, user):
                 border: none !important;
             }
             
-            /* ★ 핵심: 인쇄할 때 네모칸(자리) 크기를 위아래로 대폭 확대 (120% 이상) */
             .seat-card {
                 border: 2px solid #000 !important;
                 box-shadow: none !important;
                 break-inside: avoid;
-                min-height: 145px !important; /* 115px -> 145px (위아래로 크게 확대) */
+                min-height: 145px !important; 
                 padding: 5px !important;
             }
             
-            /* ★ 핵심: 인쇄할 때 학생 이름 및 번호 글자 크기를 약 2배로 꽉 차게 확대 */
             .seat-name { 
-                font-size: 34px !important; /* 폰트 크기 2배 뻥튀기 */
+                font-size: 34px !important; 
                 font-weight: 900 !important; 
                 line-height: 1.3 !important;
-                letter-spacing: -1px !important; /* 이름이 길어도 줄바꿈 안 되게 자간 살짝 축소 */
+                letter-spacing: -1px !important; 
             }
             .seat-x { 
-                font-size: 45px !important; /* X 표시도 거대하게 */
+                font-size: 45px !important; 
             }
             
             .blackboard { border: 4px solid #000 !important; padding: 15px !important; margin-bottom: 0 !important;}
@@ -109,7 +107,6 @@ def show_page(conn, user):
     try:
         df_students = load_student_list(conn, exclude_admins=True)
         
-        # 번호가 정상적인 숫자인 학생만 걸러내어 OOO(O번) 형식으로 리스트 생성
         all_students = []
         for _, row in df_students.iterrows():
             num_str = str(row['번호']).replace('.0', '').strip()
@@ -127,14 +124,11 @@ def show_page(conn, user):
         total_seats = rows_count * columns_count
         required_x_count = total_seats - total_students
         
-        # 💡 [핵심수정] '자리배치' 시트가 구글 시트에서 삭제되었을 경우를 완벽 대비하는 로직
         try:
             df_seat = conn.read(worksheet="자리배치", ttl="10m")
-            # 시트가 비워져있거나 구조가 깨졌을 때도 예외 처리로 던짐
             if df_seat.empty or len(df_seat.columns) != columns_count:
                 raise ValueError("Sheet is broken or empty")
         except Exception:
-            # 시트가 삭제되었거나 오류가 발생하면 코드를 멈추지 않고 빈 가상 데이터프레임 생성
             empty_grid = [["" for _ in range(columns_count)] for _ in range(rows_count)]
             df_seat = pd.DataFrame(empty_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
             
@@ -272,9 +266,18 @@ def show_page(conn, user):
                             
                             if valid:
                                 new_df = pd.DataFrame(temp_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
-                                conn.update(worksheet="자리배치", data=new_df)
-                                st.cache_data.clear()
-                                success = True; break
+                                # 💡 [핵심 추가] 시트가 없을 경우 우아하게 에러 메시지 띄우고 정지
+                                try:
+                                    conn.update(worksheet="자리배치", data=new_df)
+                                    st.cache_data.clear()
+                                    success = True; break
+                                except Exception as e:
+                                    if "WorksheetNotFound" in str(type(e).__name__):
+                                        st.error("❌ 저장 실패: 구글 시트에서 '자리배치' 탭이 삭제되었습니다! 스프레드시트 하단의 [+] 버튼을 눌러 '자리배치' 시트를 다시 만들어주세요.")
+                                        st.stop()
+                                    else:
+                                        st.error(f"❌ 저장 중 알 수 없는 오류가 발생했습니다: {e}")
+                                        st.stop()
                     
                     if success:
                         st.toast("✅ 모든 커플 및 배치 조건을 만족합니다!")
@@ -300,9 +303,16 @@ def show_page(conn, user):
                                 s_idx += 1
                                 
                     new_df = pd.DataFrame(new_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
-                    conn.update(worksheet="자리배치", data=new_df)
-                    st.cache_data.clear() 
-                    st.rerun()
+                    # 💡 [핵심 추가] 번호순 배치 시에도 시트 삭제 에러 완벽 대비
+                    try:
+                        conn.update(worksheet="자리배치", data=new_df)
+                        st.cache_data.clear() 
+                        st.rerun()
+                    except Exception as e:
+                        if "WorksheetNotFound" in str(type(e).__name__):
+                            st.error("❌ 저장 실패: 구글 시트에서 '자리배치' 탭이 삭제되었습니다! 스프레드시트 하단의 [+] 버튼을 눌러 '자리배치' 시트를 다시 만들어주세요.")
+                        else:
+                            st.error(f"❌ 저장 중 알 수 없는 오류가 발생했습니다: {e}")
                 
         with c3:
             components.html("""
