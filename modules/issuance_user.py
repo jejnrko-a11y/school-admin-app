@@ -113,36 +113,165 @@ def show_page(conn, user, fixed_info):
                     elif row['상태'] == "반려":
                         st.error("❌ 이 신청은 반려되었습니다. 선생님께 사유를 문의하세요.")
 
+import base64
+import os
+
 def render_certificate(row, fixed_info):
-    # 인쇄용 증명서 양식
+    # 1. 직인 이미지 처리 (Base64 변환하여 HTML 삽입)
+    seal_path = "teacher_seal.png"
+    seal_base64 = ""
+    if os.path.exists(seal_path):
+        with open(seal_path, "rb") as f:
+            seal_base64 = base64.b64encode(f.read()).decode()
+    
+    # 2. 날짜 데이터 파싱 (2026-03-08 -> 2026, 03, 08)
+    # row['시간']에 포함된 날짜나 신청일시를 기준으로 추출
+    try:
+        current_date = datetime.strptime(row['신청일시'].split(' ')[0], "%m-%d")
+        year = "2026" # 현재 연도
+        month = current_date.strftime("%m")
+        day = current_date.strftime("%d")
+    except:
+        year, month, day = "20  ", "  ", "  "
+
+    # 3. 양식 선택 및 제목 설정
+    is_activity = row['종류'] == "교내활동증"
+    title = "학 생 교 내 활 동 확 인 증" if is_activity else "조 퇴, 외 출 증"
+    confirm_text = "상기학생의 교내활동을 확인함." if is_activity else "상기학생의 조퇴, 외출을 허가함."
+    teacher_label = "담당교사 :" if is_activity else "담임 :"
+
+    # 4. HTML/CSS 레이아웃 (A4 가로 최적화)
     html_layout = f"""
-    <div style="border:5px double black; padding:40px; background:white; color:black; font-family:'Malgun Gothic', sans-serif; position:relative; min-height:450px;">
-        <div style="text-align:right; font-size:14px;">제 {row['일련번호']} 호</div>
-        <h1 style="text-align:center; text-decoration:underline; letter-spacing:15px; font-size:40px; margin-top:10px;">{row['종류']}</h1>
-        <table style="width:100%; border-collapse:collapse; margin-top:30px; border:2px solid black;">
+    <style>
+        @media print {{
+            @page {{ size: A4 landscape; margin: 10mm; }}
+            body {{ margin: 0; padding: 0; }}
+            .no-print {{ display: none !important; }}
+        }}
+        .cert-wrapper {{
+            width: 140mm; /* A4 가로의 절반 정도 크기 */
+            margin: 0 auto;
+            padding: 10px;
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            color: black;
+            border: 1px solid #eee;
+        }}
+        .cert-table {{
+            width: 100%;
+            border-collapse: collapse;
+            border: 2px solid black;
+        }}
+        .cert-table th, .cert-table td {{
+            border: 1px solid black;
+            height: 40px;
+            text-align: center;
+            font-size: 14px;
+        }}
+        .title-box {{
+            background-color: #e8eefc;
+            font-size: 22px !important;
+            font-weight: bold;
+            height: 50px !important;
+        }}
+        .info-header {{
+            background-color: #e8eefc;
+            height: 35px !important;
+        }}
+        .label-cell {{
+            background-color: white;
+            width: 80px;
+            font-weight: bold;
+        }}
+        .content-cell {{
+            text-align: left;
+            padding-left: 10px;
+        }}
+        .footer-section {{
+            margin-top: 15px;
+            text-align: center;
+        }}
+        .school-name {{
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 10px;
+            margin-top: 20px;
+        }}
+        .seal-container {{
+            position: relative;
+            display: inline-block;
+        }}
+        .seal-img {{
+            position: absolute;
+            top: -20px;
+            right: -40px;
+            width: 50px;
+            opacity: 0.8;
+        }}
+    </style>
+
+    <div class="cert-wrapper">
+        <table class="cert-table">
             <tr>
-                <td style="padding:15px; border:1px solid black; background:#f0f0f0; width:20%; font-weight:bold; text-align:center;">성 명</td>
-                <td style="padding:15px; border:1px solid black; width:30%; text-align:center;">{row['이름']}</td>
-                <td style="padding:15px; border:1px solid black; background:#f0f0f0; width:20%; font-weight:bold; text-align:center;">학 번</td>
-                <td style="padding:15px; border:1px solid black; width:30%; text-align:center;">{fixed_info['grade']}학년 {fixed_info['cls']}반 {row['번호']}번</td>
+                <th colspan="10" class="title-box">{title}</th>
+            </tr>
+            <tr class="info-header">
+                <td colspan="2">과</td>
+                <td colspan="2">학년</td>
+                <td colspan="2">반</td>
+                <td colspan="2">번</td>
+                <td colspan="2">성명:</td>
             </tr>
             <tr>
-                <td style="padding:15px; border:1px solid black; background:#f0f0f0; font-weight:bold; text-align:center;">일 시</td>
-                <td colspan="3" style="padding:15px; border:1px solid black;">{row['시간']}</td>
+                <td colspan="2" style="font-size:12px;">{fixed_info.get('dept', '기계과')}</td>
+                <td colspan="2">{fixed_info.get('grade', '-')}</td>
+                <td colspan="2">{fixed_info.get('cls', '-')}</td>
+                <td colspan="2">{row['번호']}</td>
+                <td colspan="2">{row['이름']}</td>
             </tr>
+            
+            {"" if is_activity else ""}
+            {f'''
             <tr>
-                <td style="padding:15px; border:1px solid black; background:#f0f0f0; font-weight:bold; text-align:center;">행선지</td>
-                <td colspan="3" style="padding:15px; border:1px solid black;">{row['행선지']}</td>
+                <td rowspan="2" class="label-cell">교내<br>활동<br>사유</td>
+                <td colspan="9" rowspan="2" class="content-cell">{row['사유']}</td>
             </tr>
+            <tr style="display:none;"></tr>
             <tr>
-                <td style="padding:15px; border:1px solid black; background:#f0f0f0; font-weight:bold; text-align:center;">사 유</td>
-                <td colspan="3" style="padding:15px; border:1px solid black;">{row['사유']}</td>
+                <td class="label-cell">장소</td>
+                <td colspan="9" class="content-cell">{row['행선지']}</td>
+            </tr>
+            ''' if is_activity else f'''
+            <tr>
+                <td rowspan="3" class="label-cell">사 유</td>
+                <td colspan="9" rowspan="3" class="content-cell">{row['사유']}</td>
+            </tr>
+            <tr style="display:none;"></tr><tr style="display:none;"></tr>
+            '''}
+            
+            <tr>
+                <td class="label-cell">시간</td>
+                <td colspan="9" class="content-cell">
+                    {row['시간']} ( 시 분 ~ 시 분 )
+                </td>
             </tr>
         </table>
-        <p style="text-align:center; margin-top:40px; font-size:18px;">위 학생은 위와 같은 사유로 {row['종류'].replace('증','')}함을 증명합니다.</p>
-        <div style="text-align:center; margin-top:60px; font-size:24px; font-weight:bold;">경기기계공업고등학교장 (직인)</div>
-        <div style="position:absolute; bottom:50px; right:120px; width:70px; height:70px; border:2px solid rgba(255,0,0,0.4); border-radius:50%; display:flex; align-items:center; justify-content:center; color:rgba(255,0,0,0.4); font-size:12px; transform:rotate(-15deg);">학교장인</div>
+
+        <div class="footer-section">
+            <p style="font-size: 16px; margin-bottom: 25px;">{confirm_text}</p>
+            <p style="font-size: 16px; letter-spacing: 5px;">20{year} 년 &nbsp;&nbsp;&nbsp;&nbsp; {month} 월 &nbsp;&nbsp;&nbsp;&nbsp; {day} 일</p>
+            
+            <div style="margin-top: 25px; font-size: 16px; text-align: right; padding-right: 50px;">
+                <span class="seal-container">
+                    {teacher_label} **오정은** (인)
+                    {f'<img src="data:image/png;base64,{seal_base64}" class="seal-img">' if seal_base64 else ''}
+                </span>
+            </div>
+            
+            <div class="school-name">경 기 기 계 공 업 고 등 학 교</div>
+        </div>
     </div>
     """
+    
     st.markdown(html_layout, unsafe_allow_html=True)
+    # 인쇄 스크립트 실행
     components.html("<script>window.parent.print();</script>", height=0)
