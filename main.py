@@ -124,13 +124,15 @@ else:
             st.rerun()
         st.divider()
 
-    # 페이지별 라우팅
+# 페이지별 라우팅
     if st.session_state.page == "메인 홈":
-        # 메인 홈 타이틀 유지 (일반적인 크기)
+        # [수정됨] O월 O일 현재시간 : OO시 OO분 형식으로 출력
+        now = get_kst()
         st.title(f"👋 {grade_str}학년 {cls_str}반 {user['name']}님")
-        st.write(f"현재 시간(KST): {get_kst().strftime('%H:%M')}")
+        st.write(f"📅 {now.month}월 {now.day}일 **현재시간 : {now.strftime('%H시 %M분')}**")
         
         st.markdown("### 🚀 바로가기")
+        # ... 이하 동일
         col1, col2 = st.columns(2)
         with col1:
             if st.button("📝\n\n결석계 작성", use_container_width=True):
