@@ -157,5 +157,5 @@ def render_certificate(row, fixed_info):
 </div>
 </div>
 """
-    st.markdown(f"### 🖨️ {info['header']} 증명서 확인")
+    st.markdown(f"### 🖨️ {info['header']} 증명서")
     st.markdown(full_html, unsafe_allow_html=True)
