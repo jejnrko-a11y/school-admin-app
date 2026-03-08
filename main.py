@@ -130,14 +130,14 @@ else:
         
         st.markdown("### 🚀 바로가기")
         c1, c2 = st.columns(2)
-        if c1.button("📝 결석신고서 작성", use_container_width=True): 
-            st.session_state.page = "결석신고서 작성"
+        if c1.button("📅 시간표", use_container_width=True): 
+            st.session_state.page = "시간표"
             st.rerun()
         if c1.button("🪑 자리배치", use_container_width=True): 
             st.session_state.page = "자리배치"
             st.rerun()
-        if c2.button("📅 시간표", use_container_width=True): 
-            st.session_state.page = "시간표"
+        if c2.button("📝 결석신고서 작성", use_container_width=True): 
+            st.session_state.page = "결석신고서 작성"
             st.rerun()
         if c2.button("🔐 비밀번호 변경", use_container_width=True): 
             st.session_state.page = "비밀번호 변경"
