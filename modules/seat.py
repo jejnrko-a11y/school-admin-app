@@ -49,7 +49,7 @@ def show_page(conn, user):
 
         /* --- 🖨️ 인쇄 전용(Print) 디자인 --- */
         @media print {
-            @page { size: A4 landscape; margin: 15mm; }
+            @page { size: A4 landscape; margin: 10mm; } /* 기본 여백을 10mm로 약간 더 확보 */
             
             /* 불필요한 UI 및 모든 종류의 구분선 완벽 제거 */
             header, [data-testid="stHeader"], [data-testid="stDecoration"], 
@@ -58,23 +58,18 @@ def show_page(conn, user):
             }
             .sticky-marker, .fixed-header-bg { display: none !important; }
             
-            /* ★ 핵심: 크기 90% 축소 및 시작점을 20% 위로 당기기 */
-            .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"] {
-                border: none !important;
-                outline: none !important;
-                box-shadow: none !important;
-                background-color: transparent !important;
-                padding-top: 0 !important;
-                margin-top: -20% !important; /* 위로 20% 끌어올림 */
+            /* ★ 화면 밖으로 날아가지 않도록 안전한 px 단위 사용 & zoom으로 90% 축소 */
+            [data-testid="stMainBlockContainer"] {
+                padding: 0 !important;
+                margin-top: -40px !important; /* 위로 약 40px 정도만 안전하게 당기기 */
                 max-width: 100% !important;
-                transform: scale(0.9) !important; /* 전체 크기를 90%로 축소 */
-                transform-origin: top center !important; /* 축소의 기준점을 화면 맨 위 가운데로 설정 */
+                zoom: 0.9 !important; /* transform 대신 zoom을 써야 인쇄 레이아웃이 안 깨짐 (90%) */
             }
             
             div[data-testid="stHeadingWithActionElements"] {
                 margin-top: 0 !important;
                 padding-top: 0 !important;
-                margin-bottom: -35px !important; 
+                margin-bottom: -25px !important; /* 제목과 자리 사이 간격 조금 더 좁힘 */
                 padding-bottom: 0 !important;
                 border: none !important;
             }
@@ -161,7 +156,7 @@ def show_page(conn, user):
                                 if str(df_seat.iloc[r, c]) == "X": is_x_default = True
                             except: pass
                             
-                            # ★ 핵심: 체크박스의 표시 이름을 5-4-3-2-1 순서로 뒤집기
+                            # 체크박스의 표시 이름을 5-4-3-2-1 순서로 뒤집기
                             disp_col = columns_count - c 
                             if st.checkbox(f"{disp_col}분단 {r+1}줄", value=is_x_default, key=f"chk_x_{r}_{c}"):
                                 disabled_seats.append((r, c))
