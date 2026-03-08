@@ -51,24 +51,30 @@ def show_page(conn, user):
         @media print {
             @page { size: A4 landscape; margin: 15mm; }
             
-            /* 불필요한 UI 및 상단 흰색 실선(Decoration) 완벽 제거 */
+            /* 불필요한 UI 및 모든 종류의 구분선 완벽 제거 */
             header, [data-testid="stHeader"], [data-testid="stDecoration"], 
             [data-testid="stSidebar"], .stButton, [data-testid="stExpander"], iframe, hr { 
                 display: none !important; 
             }
             .sticky-marker, .fixed-header-bg { display: none !important; }
             
-            /* 상단 여백 초기화하여 제목부터 바로 나오게 처리 */
-            [data-testid="stMainBlockContainer"] {
+            /* 회색 실선(테두리/그림자)이 생길 수 있는 모든 컨테이너 속성 강제 초기화 */
+            .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"] {
+                border: none !important;
+                outline: none !important;
+                box-shadow: none !important;
+                background-color: transparent !important;
                 padding-top: 0 !important;
                 margin-top: 0 !important;
                 max-width: 100% !important;
             }
+            
             div[data-testid="stHeadingWithActionElements"] {
                 margin-top: 0 !important;
                 padding-top: 0 !important;
                 margin-bottom: -35px !important; 
                 padding-bottom: 0 !important;
+                border: none !important;
             }
             
             .seat-card {
@@ -86,7 +92,8 @@ def show_page(conn, user):
 
     # --- 3. 동적 데이터 로드 및 그리드 계산 ---
     try:
-        df_seat = conn.read(worksheet="자리배치", ttl=0)
+        # 💡 [핵심수정] 429 에러 방지: ttl=0(매번 로드) 대신 ttl="10m"(10분 캐시) 사용
+        df_seat = conn.read(worksheet="자리배치", ttl="10m")
         df_students = load_student_list(conn, exclude_admins=True)
         all_students = [f"{row['이름']}({row['번호']}번)" for _, row in df_students.iterrows()]
         
@@ -98,7 +105,7 @@ def show_page(conn, user):
         columns_count = 5
         rows_count = math.ceil(total_students / columns_count)
         total_seats = rows_count * columns_count
-        required_x_count = total_seats - total_students # 필수로 지정해야 하는 X의 개수
+        required_x_count = total_seats - total_students
         
     except Exception as e:
         st.error(f"데이터 로드 오류: {e}")
@@ -134,7 +141,7 @@ def show_page(conn, user):
     fb_pairs = [] 
     ss_pairs = [] 
     cond_sep, cond_front, cond_back, cond_win, cond_hall = [], [], [], [], []
-    disabled_seats = [] # 사용하지 않을 X 좌석 좌표 리스트
+    disabled_seats = [] 
     
     if user['name'] in ["교사", "관리자"]:
         st.markdown("<br>", unsafe_allow_html=True)
@@ -180,7 +187,6 @@ def show_page(conn, user):
         
         with c1:
             if st.button("🎲 조건부 자리 바꾸기", use_container_width=True):
-                # ★ 강제 검증: 선택한 빈자리 개수가 남는 자리수와 정확히 일치하는지 확인
                 if len(disabled_seats) != required_x_count:
                     st.error(f"❌ 빈 좌석(X) 개수가 맞지 않습니다! (필요한 X 개수: **{required_x_count}개**, 현재 선택됨: **{len(disabled_seats)}개**)")
                 else:
@@ -235,6 +241,7 @@ def show_page(conn, user):
                             if valid:
                                 new_df = pd.DataFrame(temp_grid, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
                                 conn.update(worksheet="자리배치", data=new_df)
+                                st.cache_data.clear() # 💡 [핵심수정] 업데이트 성공 시에만 캐시를 초기화하여 다음 로드 때 갱신되게 함
                                 success = True; break
                     
                     if success:
@@ -245,7 +252,6 @@ def show_page(conn, user):
 
         with c2:
             if st.button("🔢 번호순 배치", use_container_width=True):
-                # ★ 번호순 배치 시에도 빈자리 개수 강제 검증
                 if len(disabled_seats) != required_x_count:
                     st.error(f"❌ 빈 좌석(X) 개수가 맞지 않습니다! (필요한 X 개수: **{required_x_count}개**, 현재 선택됨: **{len(disabled_seats)}개**)")
                 else:
@@ -263,6 +269,7 @@ def show_page(conn, user):
                                 
                     new_df = pd.DataFrame(new_grid, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
                     conn.update(worksheet="자리배치", data=new_df)
+                    st.cache_data.clear() # 💡 [핵심수정] 업데이트 성공 시에만 캐시를 초기화
                     st.rerun()
                 
         with c3:
