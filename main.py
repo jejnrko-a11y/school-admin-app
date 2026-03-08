@@ -81,23 +81,31 @@ if 'login_info' not in st.session_state:
 if 'page' not in st.session_state:
     st.session_state.page = "메인 홈"
 
+# [고정 버튼을 위한 전역 CSS]
+st.markdown("""
+    <style>
+    .fixed-home-btn {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 99999;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 if st.session_state.login_info is None:
     login_page()
 else:
     user = st.session_state.login_info
     
-    # [고정 버튼 CSS]
-    st.markdown("""
-        <style>
-        .fixed-home-btn {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            z-index: 9999;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
+    # 페이지 이동 시 고정 버튼 배치
+    if st.session_state.page != "메인 홈":
+        st.markdown('<div class="fixed-home-btn">', unsafe_allow_html=True)
+        if st.button("⬅️ 메인 홈 돌아가기"):
+            st.session_state.page = "메인 홈"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
     menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
     if user['name'] in ["교사", "관리자"]:
         menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
@@ -122,16 +130,6 @@ else:
     if st.sidebar.button("로그아웃"):
         st.session_state.clear()
         st.rerun()
-
-    # [고정 홈 버튼]
-    if st.session_state.page != "메인 홈":
-        st.markdown('<div class="fixed-home-btn">', unsafe_allow_html=True)
-        if st.button("⬅️ 홈"):
-            st.session_state.page = "메인 홈"
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-        # 상단 버튼이 내용을 가리지 않도록 여백
-        st.write("") 
 
     # 페이지 라우팅
     if st.session_state.page == "메인 홈":
