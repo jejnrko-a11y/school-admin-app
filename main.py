@@ -26,16 +26,16 @@ except Exception as e:
 # 동적 학급 정보 로드
 FIXED_INFO = load_class_info(conn)
 
+# [수정됨] 로그인 함수 내부가 아닌, 글로벌 영역에서 소수점을 제거한 변수를 정의합니다.
+# 이렇게 하면 로그인 페이지뿐만 아니라 사이드바 등 앱 전체에서 에러 없이 사용할 수 있습니다.
+dept_str = str(FIXED_INFO['dept']).replace('.0', '')
+grade_str = str(FIXED_INFO['grade']).replace('.0', '')
+cls_str = str(FIXED_INFO['cls']).replace('.0', '')
+
 # ==========================================
 # 2. 로그인 페이지 (모든 사용자 포함 로드)
 # ==========================================
 def login_page():
-    # [수정됨] 시트에서 불러온 숫자형 데이터의 소수점(.0)을 제거하여 깔끔하게 만듭니다.
-    dept_str = str(FIXED_INFO['dept'])
-    grade_str = str(FIXED_INFO['grade']).replace('.0', '')
-    cls_str = str(FIXED_INFO['cls']).replace('.0', '')
-    
-    #[수정됨] st.title 대신 HTML 태그를 사용해 폰트 사이즈를 기존의 70% 수준(약 1.8rem)으로 줄였습니다.
     st.markdown(
         f"<h1 style='font-size: 1.8rem; margin-bottom: 18px;'>🏫 경기기계공업고 {dept_str} {grade_str}학년 {cls_str}반 인증</h1>", 
         unsafe_allow_html=True
@@ -105,7 +105,8 @@ else:
     # 사이드바 
     st.sidebar.title(f"👤 {grade_str}학년 {cls_str}반 {user['name']}님")
     if user['name'] not in ["교사", "관리자", "테스트계정"]:
-        st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
+        # [수정됨] 하단 정보도 3.0-2.0 형태가 되지 않도록 정리된 변수를 사용합니다.
+        st.sidebar.write(f"{grade_str}-{cls_str} {user['num']}번")
     
     selected_menu = st.sidebar.radio("메뉴", menu_list, index=current_idx)
     
