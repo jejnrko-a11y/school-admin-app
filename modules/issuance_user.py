@@ -17,7 +17,7 @@ def show_page(conn, user, fixed_info):
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("📜 증명서 신청 및 내역")
+    st.title("📜조퇴/외출/교내활동증 신청")
     
     # 데이터 로드 (에러 방지 처리)
     try:
@@ -57,7 +57,7 @@ def show_page(conn, user, fixed_info):
             with c2:
                 destination = st.text_input("행선지(장소)", placeholder="예: 병원, 가정, 과학관")
             
-            reason = st.text_input("상세 사유", placeholder="예: 병원 진료, 개인 사정 등")
+            reason = st.text_input("상세 사유", placeholder="예: 독감으로 인한 병원 진료 등")
 
             st.write(f"⏰ **{target_date.strftime('%m/%d')} ({['월','화','수','목','금','토','일'][weekday]}) 교시 선택**")
             time_range = st.select_slider(
