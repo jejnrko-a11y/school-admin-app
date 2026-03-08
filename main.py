@@ -111,7 +111,7 @@ else:
         st.title(f"👤 {user['name']}님")
         menu_list = ["메인 홈", "시간표", "자리배치", "결석신고서 작성", "비밀번호 변경"]
         if user['name'] in ["교사", "관리자"]: 
-            menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
+            menu_list += ["[교사용]출석체크", "[교사용]결석계 다운로드"]
         
         selected = st.radio("메뉴", menu_list, index=menu_list.index(st.session_state.page) if st.session_state.page in menu_list else 0)
         if selected != st.session_state.page: 
@@ -147,15 +147,15 @@ else:
             st.markdown("---")
             st.markdown("### 👨‍🏫 교사용 행정")
             if st.button("🚩 출석체크", use_container_width=True): 
-                st.session_state.page = "교사용 출석체크"
+                st.session_state.page = "[교사용]출석체크"
                 st.rerun()
             if st.button("📁 결석계 확인", use_container_width=True): 
-                st.session_state.page = "교사용 결석계 확인"
+                st.session_state.page = "[교사용]결석계 다운로드"
                 st.rerun()
 
-    elif st.session_state.page == "교사용 출석체크": 
+    elif st.session_state.page == "[교사용]출석체크": 
         attendance.show_page(conn)
-    elif st.session_state.page == "교사용 결석계 확인": 
+    elif st.session_state.page == "[교사용]결석계 다운로드": 
         teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
     elif st.session_state.page == "결석신고서 작성": 
         absence.show_page(conn, user, FIXED_INFO, PATHS)
