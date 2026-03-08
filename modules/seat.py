@@ -58,15 +58,17 @@ def show_page(conn, user):
             }
             .sticky-marker, .fixed-header-bg { display: none !important; }
             
-            /* 회색 실선(테두리/그림자)이 생길 수 있는 모든 컨테이너 속성 강제 초기화 */
+            /* ★ 핵심: 크기 90% 축소 및 시작점을 20% 위로 당기기 */
             .stApp, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"] {
                 border: none !important;
                 outline: none !important;
                 box-shadow: none !important;
                 background-color: transparent !important;
                 padding-top: 0 !important;
-                margin-top: 0 !important;
+                margin-top: -20% !important; /* 위로 20% 끌어올림 */
                 max-width: 100% !important;
+                transform: scale(0.9) !important; /* 전체 크기를 90%로 축소 */
+                transform-origin: top center !important; /* 축소의 기준점을 화면 맨 위 가운데로 설정 */
             }
             
             div[data-testid="stHeadingWithActionElements"] {
@@ -92,7 +94,6 @@ def show_page(conn, user):
 
     # --- 3. 동적 데이터 로드 및 그리드 계산 ---
     try:
-        # 💡 [핵심수정] 429 에러 방지: ttl=0(매번 로드) 대신 ttl="10m"(10분 캐시) 사용
         df_seat = conn.read(worksheet="자리배치", ttl="10m")
         df_students = load_student_list(conn, exclude_admins=True)
         all_students = [f"{row['이름']}({row['번호']}번)" for _, row in df_students.iterrows()]
@@ -160,7 +161,9 @@ def show_page(conn, user):
                                 if str(df_seat.iloc[r, c]) == "X": is_x_default = True
                             except: pass
                             
-                            if st.checkbox(f"{c+1}분단 {r+1}줄", value=is_x_default, key=f"chk_x_{r}_{c}"):
+                            # ★ 핵심: 체크박스의 표시 이름을 5-4-3-2-1 순서로 뒤집기
+                            disp_col = columns_count - c 
+                            if st.checkbox(f"{disp_col}분단 {r+1}줄", value=is_x_default, key=f"chk_x_{r}_{c}"):
                                 disabled_seats.append((r, c))
 
             st.markdown('<p class="cond-label">↕️ 앞뒤 짝궁 지정 (세로로 인접)</p>', unsafe_allow_html=True)
@@ -241,7 +244,7 @@ def show_page(conn, user):
                             if valid:
                                 new_df = pd.DataFrame(temp_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
                                 conn.update(worksheet="자리배치", data=new_df)
-                                st.cache_data.clear() # 💡 [핵심수정] 업데이트 성공 시에만 캐시를 초기화하여 다음 로드 때 갱신되게 함
+                                st.cache_data.clear()
                                 success = True; break
                     
                     if success:
@@ -269,7 +272,7 @@ def show_page(conn, user):
                                 
                     new_df = pd.DataFrame(new_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
                     conn.update(worksheet="자리배치", data=new_df)
-                    st.cache_data.clear() # 💡 [핵심수정] 업데이트 성공 시에만 캐시를 초기화
+                    st.cache_data.clear() 
                     st.rerun()
                 
         with c3:
