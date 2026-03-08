@@ -83,53 +83,46 @@ if 'login_info' not in st.session_state:
 if 'page' not in st.session_state:
     st.session_state.page = "메인 홈"
 
-# [CSS 핵심 수정] 
-# 1. 고정 버튼 컨테이너를 브라우저 최상단에 박아버립니다.
-# 2. Streamlit의 메인 콘텐츠(st.main)에 상단 여백을 주어 버튼이 글자를 가리지 않게 합니다.
-st.markdown("""
-    <style>
-    /* 브라우저 상단 50px 위치에 버튼 고정 */
-    .fixed-home-btn {
-        position: fixed;
-        top: 0px;
-        left: 0px;
-        width: 100%;
-        padding: 10px 20px;
-        background-color: white;
-        z-index: 99999;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    /* 본문 콘텐츠가 버튼에 가려지지 않게 상단 여백 확보 */
-    [data-testid="stMainBlockContainer"] {
-        padding-top: 60px;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 if st.session_state.login_info is None:
     login_page()
 else:
     user = st.session_state.login_info
     
-    # [수정] 모든 페이지에서 메인 홈이 아닐 때 상단에 버튼을 배치
-    if st.session_state.page != "메인 홈":
-        st.markdown('<div class="fixed-home-btn">', unsafe_allow_html=True)
-        if st.button("⬅️ 메인 홈 돌아가기"):
+    # [수정됨] 고정 버튼을 사이드바 맨 위로 이동 (스크롤 영향을 안 받음)
+    with st.sidebar:
+        st.title(f"👤 {grade_str}학년 {cls_str}반 {user['name']}님")
+        
+        # 홈 돌아가기 버튼을 사이드바 최상단에 배치
+        if st.session_state.page != "메인 홈":
+            if st.button("⬅️ 메인 홈 돌아가기", use_container_width=True):
+                st.session_state.page = "메인 홈"
+                st.rerun()
+            st.divider()
+        
+        # 나머지 메뉴
+        menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
+        if user['name'] in ["교사", "관리자"]:
+            menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
+        
+        try:
+            current_idx = menu_list.index(st.session_state.page)
+        except:
+            current_idx = 0
             st.session_state.page = "메인 홈"
+            
+        selected_menu = st.sidebar.radio("메뉴", menu_list, index=current_idx)
+        
+        if selected_menu != st.session_state.page:
+            st.session_state.page = selected_menu
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+            
+        if st.sidebar.button("로그아웃"):
+            st.session_state.clear()
+            st.rerun()
 
-    # ... (이하 메뉴 리스트 및 사이드바 로직은 동일)
-
-    menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
-    if user['name'] in ["교사", "관리자"]:
-        menu_list += ["교사용 출석체크", "교사용 결석계 확인"]
-
-    try:
-        current_idx = menu_list.index(st.session_state.page)
-    except:
-        current_idx = 0
-        st.session_state.page = "메인 홈"
+    # (이하 페이지 라우팅 로직은 동일)
+    if st.session_state.page == "메인 홈":
+        # ... (메인 홈 코드)
 
     # 사이드바
     st.sidebar.title(f"👤 {grade_str}학년 {cls_str}반 {user['name']}님")
