@@ -1,15 +1,25 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import random
 import math
-from utils import load_student_list
+from utils import load_student_list, load_class_info
 
 def show_page(conn, user):
-    st.title("🪑 지능형 조건부 자리배치")
+    # --- 1. 동적 학급 정보 로드 및 제목 설정 ---
+    try:
+        FIXED_INFO = load_class_info(conn)
+        grade_str = str(FIXED_INFO['grade']).replace('.0', '')
+        cls_str = str(FIXED_INFO['cls']).replace('.0', '')
+    except Exception:
+        grade_str, cls_str = "O", "O" # 로드 실패 시 기본값
+        
+    st.title(f"🪑 {grade_str}학년 {cls_str}반 자리배치표")
 
-    # --- 1. CSS 스타일 ---
+    # --- 2. CSS 스타일 (화면용 & 인쇄용) ---
     st.markdown("""
         <style>
+        /* --- 화면 전용 디자인 --- */
         .blackboard {
             background-color: #1e3d2f; color: white; border: 8px solid #5d4037;
             border-radius: 5px; padding: 20px; text-align: center;
@@ -30,10 +40,36 @@ def show_page(conn, user):
         .seat-name { font-weight: bold; font-size: 15px; color: #333; line-height: 1.2; }
         .seat-x { color: #ff5252; font-weight: bold; font-size: 20px; }
         .cond-label { font-size: 13px; font-weight: bold; color: #1E3A8A; margin-top: 5px; }
+
+        /* --- 🖨️ 인쇄 전용(Print) 디자인 --- */
+        @media print {
+            /* A4 가로 방향 설정 */
+            @page { size: A4 landscape; margin: 15mm; }
+            
+            /* 불필요한 Streamlit UI 요소 및 교사 메뉴 숨기기 */
+            header, [data-testid="stSidebar"], .stButton, [data-testid="stExpander"], iframe { 
+                display: none !important; 
+            }
+            .sticky-marker, .fixed-header-bg { display: none !important; }
+            
+            /* 본문 여백 제거 및 가로 꽉 차게 */
+            [data-testid="stMainBlockContainer"] {
+                padding: 0 !important;
+                max-width: 100% !important;
+            }
+            
+            /* 자리 카드 테두리 및 그림자 인쇄 최적화 */
+            .seat-card {
+                border: 2px solid #000 !important;
+                box-shadow: none !important;
+                break-inside: avoid;
+            }
+            .blackboard { border: 4px solid #000 !important; }
+        }
         </style>
     """, unsafe_allow_html=True)
 
-    # --- 2. 동적 데이터 로드 및 그리드 계산 ---
+    # --- 3. 동적 데이터 로드 및 그리드 계산 ---
     try:
         df_seat = conn.read(worksheet="자리배치", ttl=0)
         
@@ -46,7 +82,7 @@ def show_page(conn, user):
             st.warning("학생 데이터가 없습니다.")
             return
             
-        # [핵심] 학생 수에 따른 행(Row) 개수 동적 계산 (가로 5분단 고정)
+        # 학생 수에 따른 행(Row) 개수 동적 계산 (가로 5분단 고정)
         columns_count = 5
         rows_count = math.ceil(total_students / columns_count)
         
@@ -54,13 +90,13 @@ def show_page(conn, user):
         st.error(f"데이터 로드 오류: {e}")
         return
 
-    # --- 3. 교사 전용 조건 설정 폼 ---
+    # --- 4. 교사 전용 조건 설정 및 버튼 ---
     fb_pairs =[] 
     ss_pairs =[] 
     cond_sep, cond_front, cond_back, cond_win, cond_hall = [], [], [], [],[]
     cond_fixed_br = "선택 안함"
     
-    if user['name'] == "교사":
+    if user['name'] in ["교사", "관리자"]:
         with st.expander("⚙️ 특별 자리배치 조건 설정 (셔플 시 적용)"):
             st.info(f"💡 현재 학생 수는 총 {total_students}명이며, 자동으로 {rows_count}줄로 배치됩니다.")
             
@@ -86,7 +122,8 @@ def show_page(conn, user):
             cond_win = st.multiselect("🪟 창가 지정 (1분단)", all_students)
             cond_hall = st.multiselect("🚪 복도 지정 (5분단)", all_students)
 
-        c1, c2 = st.columns(2)
+        # 컨트롤 버튼 영역 (3등분 하여 인쇄 버튼 추가)
+        c1, c2, c3 = st.columns([2, 2, 1.5])
         
         with c1:
             if st.button("🎲 조건부 자리 바꾸기", use_container_width=True):
@@ -166,11 +203,13 @@ def show_page(conn, user):
                     st.error("❌ 조건이 너무 복잡하여 배치를 찾지 못했습니다. 커플 수를 줄이거나 조건을 완화해 주세요.")
 
         with c2:
-            if st.button("🔢 번호순(1분단부터)", use_container_width=True):
+            if st.button("🔢 번호순 배치", use_container_width=True):
                 ordered = all_students.copy()
                 new_grid = [["" for _ in range(columns_count)] for _ in range(rows_count)]
                 s_idx = 0
-                for c in range(columns_count):
+                
+                # [수정됨] 오른쪽 맨 앞(r=0, c=4)부터 뒤로 채우고, 끝나면 왼쪽 열(c=3,2,1,0)로 넘어감
+                for c in range(columns_count - 1, -1, -1):
                     for r in range(rows_count):
                         if s_idx < len(ordered):
                             new_grid[r][c] = ordered[s_idx]
@@ -181,11 +220,28 @@ def show_page(conn, user):
                 new_df = pd.DataFrame(new_grid, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
                 conn.update(worksheet="자리배치", data=new_df)
                 st.rerun()
+                
+        with c3:
+            # HTML/JS를 이용한 브라우저 자체 인쇄 기능 트리거
+            components.html("""
+                <script>
+                    function triggerPrint() {
+                        window.parent.print();
+                    }
+                </script>
+                <button onclick="triggerPrint()" style="
+                    width: 100%; height: 38px;
+                    background-color: #f0f2f6; border: 1px solid #d0d4dc;
+                    border-radius: 8px; font-family: sans-serif;
+                    font-size: 15px; font-weight: 600; color: #31333F;
+                    cursor: pointer; display: flex; align-items: center; justify-content: center;
+                ">🖨️ 인쇄하기</button>
+            """, height=40)
 
-    # --- 4. 시각적 출력 ---
-    st.markdown("<h4 style='text-align: center; color: #555;'>뒷자리 (Back)</h4>", unsafe_allow_html=True)
+    # --- 5. 시각적 출력 (자리배치 렌더링) ---
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True) # 위 여백
 
-    # UI 역순 렌더링: (최대 행 - 1) 부터 0행까지 거꾸로
+    # UI 역순 렌더링: (최대 행 - 1) 부터 0행까지 거꾸로 출력 (r=0이 맨 앞/화면 하단)
     for r in range(rows_count - 1, -1, -1):
         cols = st.columns(columns_count)
         for c in range(columns_count):
