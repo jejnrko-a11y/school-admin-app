@@ -34,63 +34,76 @@ def show_page(conn):
         return
 
     # ---------------------------------------------------------
-    # PART 1: 특이사항 학생 추가 (상단 고정 입력부) - UI 최적화 버전
+    # PART 1: 특이사항 학생 추가 (상단 고정 입력부) - 슬라이더 업그레이드
     # ---------------------------------------------------------
     st.subheader("➕ 특이사항 기록 추가")
+
+    # [로직] '종류' 선택에 따른 슬라이더 자동 설정을 위해 폼 외부 또는 세션 상태 활용
+    if 'temp_category' not in st.session_state:
+        st.session_state.temp_category = "결석"
+
     with st.form("add_special_form", clear_on_submit=True):
-        # [첫 번째 줄] 기본 정보 입력 (3열 구성)
-        r1_c1, r1_c2, r1_c3 = st.columns([1, 1.5, 1])
+        # [첫 번째 줄] 기본 정보 (3열)
+        r1_c1, r1_c2, r1_c3 = st.columns([1, 1.5, 1.2])
         with r1_c1:
             target_date = st.date_input("발생 날짜", value=get_kst().date())
         with r1_c2:
             selected_student = st.selectbox("학생 선택", student_list)
         with r1_c3:
-            category = st.selectbox("종류", ["결석", "지각", "조퇴", "결과", "외출"])
+            # 종류 선택 (결석 선택 시 로직 처리를 위해 변수 저장)
+            category = st.selectbox("종류", ["결석", "지각", "조퇴", "결과", "외출"], key="category_select")
 
-        # [교시 선택 로직] 요일별 자동 반영 (화요일 7교시 그외 6교시)
-        weekday = target_date.weekday() # 0:월, 1:화, 2:수, 3:목, 4:금, 5:토, 6:일
+        # [교시 리스트 생성]
+        weekday = target_date.weekday()
         period_options = ["조회", "1교시", "2교시", "3교시", "4교시", "5교시", "6교시"]
-        if weekday == 1: # 화요일(1)일 때만 7교시 추가
-            period_options.append("7교시")
+        if weekday == 1: period_options.append("7교시")
         period_options.append("종례")
 
-        # [두 번째 줄] 상세 정보 및 교시 다중 선택 (3열 구성)
-        r2_c1, r2_c2, r2_c3 = st.columns([1, 1.8, 2.2])
+        # [두 번째 줄] 사유 및 비고 (2열)
+        r2_c1, r2_c2 = st.columns([1, 2.7])
         with r2_c1:
             reason_type = st.selectbox("사유", ["질병", "인정", "미인정", "기타"])
         with r2_c2:
-            selected_periods = st.multiselect("교시(시간) 선택", period_options, help="여러 교시를 선택할 수 있습니다.")
-        with r2_c3:
-            remark = st.text_input("비고 (상세 사유 등)", placeholder="예: 감기 증상으로 인한 병원 방문")
+            remark = st.text_input("비고 (상세 사유 등)", placeholder="사유를 상세히 입력하세요.")
+
+        st.write("") # 간격 조절
+        st.markdown("##### ⏰ 교시(시간) 범위 선택")
+        
+        # [슬라이더 자동 설정 로직]
+        # '결석'일 경우 전체 범위[조회~종례], 아닐 경우 기본값[조회] 혹은 마지막 선택 유지
+        slider_default = (period_options[0], period_options[-1]) if category == "결석" else (period_options[0], period_options[0])
+        
+        # [세 번째 줄] 교시 슬라이더 (너비 확보를 위해 단독 배치 또는 넓은 컬럼)
+        selected_range = st.select_slider(
+            "마우스로 드래그하여 범위를 선택하세요",
+            options=period_options,
+            value=slider_default,
+            help="'결석' 선택 시 자동으로 전체 범위가 지정됩니다."
+        )
 
         # 제출 버튼
         if st.form_submit_button("기록 추가", use_container_width=True):
-            if not selected_periods:
-                st.error("⚠️ 교시를 최소 하나 이상 선택해 주세요.")
+            s_num = int(selected_student.split('번')[0])
+            s_name = selected_student.split(' ')[1]
+            
+            # 범위 데이터 처리 (시작~종료)
+            if selected_range[0] == selected_range[1]:
+                period_str = selected_range[0] # 단일 교시
             else:
-                s_num = int(selected_student.split('번')[0])
-                s_name = selected_student.split(' ')[1]
-                
-                # 다중 선택된 교시를 문자열로 결합
-                period_str = ", ".join(selected_periods)
-                
-                new_row = pd.DataFrame([{
-                    "날짜": target_date.strftime("%Y-%m-%d"),
-                    "번호": s_num, 
-                    "이름": s_name,
-                    "종류": category, 
-                    "사유": reason_type, 
-                    "교시": period_str, # 교시 정보 저장
-                    "비고": remark
-                }])
-                
-                updated_special = pd.concat([df_special, new_row], ignore_index=True)
-                conn.update(worksheet="출결특이사항", data=updated_special)
-                st.success(f"✅ {s_name} 학생의 기록이 추가되었습니다. ({period_str})")
-                st.cache_data.clear() # 데이터 갱신을 위해 캐시 삭제
-                st.rerun()
-
-    st.divider()
+                period_str = f"{selected_range[0]} ~ {selected_range[1]}" # 범위 표시
+            
+            new_row = pd.DataFrame([{
+                "날짜": target_date.strftime("%Y-%m-%d"),
+                "번호": s_num, "이름": s_name,
+                "종류": category, "사유": reason_type, 
+                "교시": period_str, "비고": remark
+            }])
+            
+            updated_special = pd.concat([df_special, new_row], ignore_index=True)
+            conn.update(worksheet="출결특이사항", data=updated_special)
+            st.success(f"✅ {s_name} 학생 기록 추가 완료 ({period_str})")
+            st.cache_data.clear()
+            st.rerun()
 
     # ---------------------------------------------------------
     # PART 2: 월별 탭 구성 및 자동 판별 (하단 확인부)
