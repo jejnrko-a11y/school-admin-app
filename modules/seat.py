@@ -179,8 +179,8 @@ def show_page(conn, user):
             cond_sep = st.multiselect("💢 분리 지정 (절대 인접 불가)", all_students)
             cond_front = st.multiselect("📏 앞자리 지정 (1열)", all_students)
             cond_back = st.multiselect(f"📺 뒷자리 지정 ({rows_count}열)", all_students)
-            cond_win = st.multiselect("🪟 창가 지정 (1분단)", all_students)
-            cond_hall = st.multiselect("🚪 복도 지정 (5분단)", all_students)
+            cond_win = st.multiselect("🪟 복도 지정 (1분단)", all_students)
+            cond_hall = st.multiselect("🚪 창가 지정 (5분단)", all_students)
 
         # 하단 컨트롤 버튼 영역
         c1, c2, c3 = st.columns([2, 2, 1.5])
@@ -239,7 +239,7 @@ def show_page(conn, user):
                             if valid and cond_hall and any(s_map[n][1] != 4 for n in cond_hall): valid = False
                             
                             if valid:
-                                new_df = pd.DataFrame(temp_grid, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
+                                new_df = pd.DataFrame(temp_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
                                 conn.update(worksheet="자리배치", data=new_df)
                                 st.cache_data.clear() # 💡 [핵심수정] 업데이트 성공 시에만 캐시를 초기화하여 다음 로드 때 갱신되게 함
                                 success = True; break
@@ -267,7 +267,7 @@ def show_page(conn, user):
                                 new_grid[r][c] = ordered[s_idx]
                                 s_idx += 1
                                 
-                    new_df = pd.DataFrame(new_grid, columns=["1분단", "2분단", "3분단", "4분단", "5분단"])
+                    new_df = pd.DataFrame(new_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
                     conn.update(worksheet="자리배치", data=new_df)
                     st.cache_data.clear() # 💡 [핵심수정] 업데이트 성공 시에만 캐시를 초기화
                     st.rerun()
