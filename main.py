@@ -126,10 +126,9 @@ else:
 
 # 페이지별 라우팅
     if st.session_state.page == "메인 홈":
-        # [수정됨] O월 O일 현재시간 : OO시 OO분 형식으로 출력
         now = get_kst()
         st.title(f"👋 {grade_str}학년 {cls_str}반 {user['name']}님")
-        st.write(f"📅 {now.year}년 {now.month}월 {now.day}일, **현재시간 : {now.strftime('%H시 %M분')}**")
+        st.write(f"📅 {now.year}년 {now.month}월 {now.day}일      **현재시간 : {now.strftime('%H시 %M분')}**")
         
         st.markdown("### 🚀 바로가기")
         # ... 이하 동일
