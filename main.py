@@ -7,7 +7,7 @@ import pandas as pd
 # ==========================================
 # 1. 초기 설정 및 보안 로드
 # ==========================================
-st.set_page_config(page_title="행정 자동화 시스템", layout="centered")
+st.set_page_config(page_title="학교 생활 도우미", layout="centered")
 
 ADMIN_PASSWORD = st.secrets.get("auth", {}).get("admin_password", "0000") 
 PATHS = {"font": "NanumGothic-Regular.ttf", "bold_font": "NanumGothic-Bold.ttf", "bg": "background.png"}
@@ -24,20 +24,27 @@ dept_str = str(FIXED_INFO['dept']).replace('.0', '')
 grade_str = str(FIXED_INFO['grade']).replace('.0', '')
 cls_str = str(FIXED_INFO['cls']).replace('.0', '')
 
-# [CSS: 상단 고정 헤더 (Sticky)]
+# [CSS: 상단 고정 헤더 - fixed 사용]
 st.markdown("""
     <style>
-    .sticky-header {
-        position: -webkit-sticky;
-        position: sticky;
+    /* 상단 고정 헤더 설정 */
+    .fixed-top-header {
+        position: fixed;
         top: 0;
+        left: 0;
+        width: 100%;
+        height: 60px;
         background-color: white;
+        border-bottom: 2px solid #e0e0e0;
         z-index: 9999;
-        padding: 10px 0;
-        border-bottom: 1px solid #e0e0e0;
+        display: flex;
+        align-items: center;
+        padding-left: 20px;
     }
-    /* Streamlit 기본 여백 조정 */
-    .block-container { padding-top: 1rem !important; }
+    /* 본문 콘텐츠가 헤더 아래에서 시작되도록 여백 설정 */
+    [data-testid="stMainBlockContainer"] {
+        padding-top: 80px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -48,8 +55,7 @@ def login_page():
     st.markdown(f"<h1 style='font-size: 1.8rem; margin-bottom: 18px;'>🏫 경기기계공업고 {dept_str} {grade_str}학년 {cls_str}반 인증</h1>", unsafe_allow_html=True)
     df_all_users = load_student_list(conn, exclude_admins=False)
     
-    if df_all_users.empty:
-        st.error("⚠️ 학생 명부를 불러오지 못했습니다."); return
+    if df_all_users.empty: st.error("⚠️ 학생 명부를 불러오지 못했습니다."); return
 
     student_options = []
     for _, row in df_all_users.iterrows():
@@ -57,7 +63,7 @@ def login_page():
         num_raw = str(row['번호']).replace('.0', '')
         if num_raw == 'nan' or name in ['교사', '테스트계정', '관리자']: student_options.append(name)
         else: student_options.append(f"{name}({num_raw}번)")
-
+    
     with st.container(border=True):
         selected_user = st.selectbox("본인의 이름을 선택하세요", student_options)
         pw_input = st.text_input("비밀번호", type="password")
@@ -70,7 +76,7 @@ def login_page():
             else: st.error("비밀번호가 틀렸습니다.")
 
 # ==========================================
-# 3. 메인 로직 및 내비게이션
+# 3. 메인 로직 및 페이지 라우팅
 # ==========================================
 if 'login_info' not in st.session_state: st.session_state.login_info = None
 if 'page' not in st.session_state: st.session_state.page = "메인 홈"
@@ -80,13 +86,11 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # [고정 헤더 컨테이너]
-    st.markdown('<div class="sticky-header">', unsafe_allow_html=True)
+    # [고정 헤더 렌더링]
+    st.markdown('<div class="fixed-top-header">', unsafe_allow_html=True)
     if st.session_state.page != "메인 홈":
-        if st.button("⬅️ 메인 홈 돌아가기"):
-            st.session_state.page = "메인 홈"; st.rerun()
-    else:
-        st.write(f"&nbsp;&nbsp;**{grade_str}학년 {cls_str}반 {user['name']}님**")
+        if st.button("⬅️ 메인 홈 돌아가기"): st.session_state.page = "메인 홈"; st.rerun()
+    else: st.write(f"&nbsp;&nbsp;**{grade_str}학년 {cls_str}반 {user['name']}님**")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # 사이드바
@@ -99,7 +103,7 @@ else:
         if selected != st.session_state.page: st.session_state.page = selected; st.rerun()
         if st.button("로그아웃", use_container_width=True): st.session_state.clear(); st.rerun()
 
-    # 페이지 라우팅 (헤더 아래 내용)
+    # 페이지 라우팅
     if st.session_state.page == "메인 홈":
         st.markdown(f"<h1 style='font-size: 2.0rem;'>👋 {grade_str}학년 {cls_str}반 {user['name']}님</h1>", unsafe_allow_html=True)
         now = get_kst()
