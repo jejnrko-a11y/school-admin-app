@@ -63,14 +63,14 @@ def show_page(conn, user):
                 outline: none !important;
                 box-shadow: none !important;
                 background-color: transparent !important;
-                padding-top: 0 !important;
+                padding-top: 20px !important; /* 💡 핵심: 제목 상단 잘림 방지를 위해 안전한 여백 추가 */
                 margin-top: 0 !important; 
                 max-width: 100% !important;
                 zoom: 0.82 !important; 
             }
             
             div[data-testid="stHeadingWithActionElements"] {
-                margin-top: 0 !important;
+                margin-top: 10px !important; /* 위쪽으로 짤리지 않게 마진 여유 확보 */
                 padding-top: 10px !important; 
                 margin-bottom: 0px !important; 
                 padding-bottom: 0 !important;
@@ -105,8 +105,10 @@ def show_page(conn, user):
 
     # --- 3. 동적 데이터 로드 및 그리드 계산 ---
     try:
+        # 학생명부 먼저 로드
         df_students = load_student_list(conn, exclude_admins=True)
         
+        # 💡 번호가 정상적인 숫자인 학생만 걸러내어 OOO(O번) 형식으로 생성
         all_students = []
         for _, row in df_students.iterrows():
             num_str = str(row['번호']).replace('.0', '').strip()
@@ -124,13 +126,37 @@ def show_page(conn, user):
         total_seats = rows_count * columns_count
         required_x_count = total_seats - total_students
         
+        # 💡 [핵심수정] 자리배치 시트가 없거나 텅 비어있을 경우, 점선 빈칸 대신 학생명부의 '번호순 배치'로 자동 생성
         try:
             df_seat = conn.read(worksheet="자리배치", ttl="10m")
+            
+            # 시트가 비정상이거나 데이터가 아예 없는지 검사
             if df_seat.empty or len(df_seat.columns) != columns_count:
-                raise ValueError("Sheet is broken or empty")
+                raise ValueError("Sheet is broken")
+                
+            has_data = False
+            for r in range(len(df_seat)):
+                for c in range(len(df_seat.columns)):
+                    val = str(df_seat.iloc[r, c]).strip()
+                    if val and val not in ["nan", "None", ""]:
+                        has_data = True; break
+            if not has_data:
+                raise ValueError("No valid data in sheet")
+                
         except Exception:
-            empty_grid = [["" for _ in range(columns_count)] for _ in range(rows_count)]
-            df_seat = pd.DataFrame(empty_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
+            # 에러가 나거나 데이터가 없으면 '학생명부(all_students)'를 기반으로 번호순 5~1분단 배열 생성
+            ordered = all_students.copy()
+            new_grid = [["" for _ in range(columns_count)] for _ in range(rows_count)]
+            s_idx = 0
+            
+            for c in range(columns_count - 1, -1, -1):
+                for r in range(rows_count):
+                    if s_idx < len(ordered):
+                        new_grid[r][c] = ordered[s_idx]
+                        s_idx += 1
+                    else:
+                        new_grid[r][c] = "X"
+            df_seat = pd.DataFrame(new_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
             
     except Exception as e:
         st.error(f"데이터 로드 오류: {e}")
@@ -266,7 +292,6 @@ def show_page(conn, user):
                             
                             if valid:
                                 new_df = pd.DataFrame(temp_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
-                                # 💡 [핵심 추가] 시트가 없을 경우 우아하게 에러 메시지 띄우고 정지
                                 try:
                                     conn.update(worksheet="자리배치", data=new_df)
                                     st.cache_data.clear()
@@ -303,7 +328,6 @@ def show_page(conn, user):
                                 s_idx += 1
                                 
                     new_df = pd.DataFrame(new_grid, columns=["5분단", "4분단", "3분단", "2분단", "1분단"])
-                    # 💡 [핵심 추가] 번호순 배치 시에도 시트 삭제 에러 완벽 대비
                     try:
                         conn.update(worksheet="자리배치", data=new_df)
                         st.cache_data.clear() 
