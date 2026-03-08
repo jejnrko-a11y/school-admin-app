@@ -6,6 +6,19 @@ import base64
 import os
 from utils import get_kst, send_discord_notification
 
+# 교시별 시간 매핑 데이터
+TIME_TABLE = {
+    "조회": {"start": "08:30", "end": "08:40"},
+    "1교시": {"start": "08:40", "end": "09:30"},
+    "2교시": {"start": "09:40", "end": "10:30"},
+    "3교시": {"start": "10:40", "end": "11:30"},
+    "4교시": {"start": "11:40", "end": "12:30"},
+    "5교시": {"start": "13:30", "end": "14:20"},
+    "6교시": {"start": "14:30", "end": "15:20"},
+    "7교시": {"start": "15:30", "end": "16:20"},
+    "종례": {"start": "15:20", "end": "15:20"} # 기본 종례
+}
+
 def show_page(conn, user, fixed_info):
     # 1. UI 및 인쇄 설정 CSS
     st.markdown("""
@@ -14,7 +27,6 @@ def show_page(conn, user, fixed_info):
 @media print {
     header, [data-testid="stHeader"], [data-testid="stSidebar"], footer { display: none !important; }
     .stButton, .no-print, [data-testid="stForm"], .stTabs [role="tablist"], .stInfo, .stTitle, hr, .stMarkdown { display: none !important; }
-    /* 인쇄 시 미리보기 영역 제목(마크다운) 숨기기 */
     h3 { display: none !important; }
     .main .block-container { padding: 0 !important; margin: 0 !important; }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -42,7 +54,11 @@ def show_page(conn, user, fixed_info):
 
         weekday = target_date.weekday()
         period_options = ["조회", "1교시", "2교시", "3교시", "4교시", "5교시", "6교시"]
-        if weekday == 1: period_options.append("7교시")
+        
+        # 화요일 하교 시간 설정
+        is_tuesday = (weekday == 1)
+        if is_tuesday:
+            period_options.append("7교시")
         period_options.append("종례")
 
         if target_date != st.session_state.issuance_date:
@@ -61,21 +77,34 @@ def show_page(conn, user, fixed_info):
             
             reason = st.text_input("상세 사유", placeholder="사유를 입력하세요.")
 
-            st.write(f"⏰ **시간 선택**")
+            st.write(f"⏰ **시간(교시) 선택**")
             time_range = st.select_slider("범위 선택", options=period_options, value=st.session_state.issuance_slider)
             
             if st.form_submit_button("🚀 승인 신청하기", use_container_width=True):
                 if not destination or not reason:
                     st.error("장소와 사유를 모두 입력해 주세요.")
                 else:
-                    period_str = f"{time_range[0]}~{time_range[1]}" if time_range[0] != time_range[1] else time_range[0]
+                    # 실제 표시될 시간 계산
+                    start_p, end_p = time_range
+                    start_time = TIME_TABLE[start_p]["start"]
+                    
+                    if cert_type == "조퇴증":
+                        display_time = f"{start_time} ~ "
+                    else:
+                        # 화요일/평일 종례 시간 보정
+                        if end_p == "종례":
+                            end_time = "16:20" if is_tuesday else "15:20"
+                        else:
+                            end_time = TIME_TABLE[end_p]["end"]
+                        display_time = f"{start_time} ~ {end_time}"
+
                     new_data = pd.DataFrame([{
                         "일련번호": "-", 
                         "신청일시": get_kst().strftime("%m-%d %H:%M"),
                         "이름": user['name'], 
                         "번호": user['num'], 
                         "종류": cert_type,
-                        "시간": f"{target_date.strftime('%m/%d')} ({period_str})",
+                        "시간": f"{target_date.strftime('%m/%d')} ({display_time})",
                         "행선지": destination, 
                         "사유": reason, 
                         "상태": "신청", 
@@ -84,8 +113,7 @@ def show_page(conn, user, fixed_info):
                     updated_df = pd.concat([df_log, new_data], ignore_index=True)
                     conn.update(worksheet="발급명부", data=updated_df)
                     
-                    # [추가] 디스코드 알림 전송
-                    send_discord_notification(f"🔔 [증명서 신청] {user['name']} 학생이 {cert_type}을 신청했습니다. (사유: {reason})")
+                    send_discord_notification(f"🔔 [증명서 신청] {user['name']} 학생이 {cert_type}을 신청했습니다. (시간: {display_time} / 사유: {reason})")
                     
                     st.success("신청 완료!")
                     st.cache_data.clear()
@@ -113,29 +141,25 @@ def show_page(conn, user, fixed_info):
 # 공식 양식 렌더링 함수
 # ---------------------------------------------------------
 def render_certificate(row, fixed_info):
-    # 1. 교사 직인 처리
     seal_html = ""
     if os.path.exists("teacher_seal.png"):
         with open("teacher_seal.png", "rb") as f:
             seal_b64 = base64.b64encode(f.read()).decode()
             seal_html = f'<img src="data:image/png;base64,{seal_b64}" style="position:absolute; width:48px; margin-left:-35px; margin-top:-10px; opacity:0.8; z-index:10;">'
 
-    # 2. 데이터 매핑 및 명칭 설정
     dept = str(fixed_info.get('dept', '미상')).replace('.0', '')
     grade = str(fixed_info.get('grade', '0')).replace('.0', '')
     cls = str(fixed_info.get('cls', '0')).replace('.0', '')
     num = str(row['번호']).replace('.0', '')
     name = row['이름']
     
-    # 종류별 제목 및 조사 매핑
     type_info = {
         "조퇴증": {"title": "조 퇴 증", "text": "조퇴를", "header": "조퇴"},
         "외출증": {"title": "외 출 증", "text": "외출을", "header": "외출"},
-        "교내활동증": {"title": "학생 교내 활동 확인증", "text": "학생 교내 활동 확인을", "header": "학생 교내 활동 확인"}
+        "교내활동증": {"title": "학생 교내 활동 확인증", "text": "학생 교내 활동 확인을", "header": "교내활동"}
     }
     info = type_info.get(row['종류'], {"title": "확 인 증", "text": "사항을", "header": "확인"})
     
-    # 시간 파싱
     try:
         date_part = row['시간'].split(' ')[0] # "03/10"
         m, d = date_part.split('/')
@@ -144,46 +168,43 @@ def render_certificate(row, fixed_info):
     except:
         y, m, d, time_detail = "2026", "  ", "  ", row['시간']
 
-    # 3. HTML 양식 (요구사항: 상단 2줄 하늘색, 제목 1.8배, 실선 통일)
+    # HTML 양식 (요구사항 반영: 높이 통일, 얇은 실선, 정교한 다듬기)
     full_html = f"""
-<div style="width:500px; margin:20px auto; border:1px solid black; padding:0; background:white; color:black; font-family:'Malgun Gothic', 'Dotum', sans-serif;">
-<div style="border-bottom:1px solid black; background-color:#D9E1F2; padding:15px; text-align:center;">
-<h2 style="margin:0; font-size:40px; letter-spacing:5px; font-weight:bold;">{info['title']}</h2>
-</div>
-<div style="background-color:#D9E1F2; height:45px; border-bottom:1px solid black; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:bold; letter-spacing:1px;">
-{dept}과 &nbsp; {grade}학년 &nbsp; {cls}반 &nbsp; {num}번 &nbsp; 성명 : {name}
-</div>
-<table style="width:100%; border-collapse:collapse; border:none;">
-<tr style="height:65px;">
-<td style="width:20%; border:1px solid black; border-top:none; border-left:none; background:#f0f0f0; text-align:center; font-weight:bold; font-size:16px;">사 유</td>
-<td style="width:80%; border:1px solid black; border-top:none; border-right:none; padding:10px; text-align:left; vertical-align:middle; font-size:16px;">{row['사유']}</td>
-</tr>
-<tr style="height:65px;">
-<td style="border:1px solid black; border-left:none; background:#f0f0f0; text-align:center; font-weight:bold; font-size:16px;">장소</td>
-<td style="border:1px solid black; border-right:none; padding-left:15px; text-align:left; vertical-align:middle; font-size:16px;">{row['행선지']}</td>
-</tr>
-<tr style="height:65px;">
-<td style="border:1px solid black; border-left:none; border-bottom:none; background:#f0f0f0; text-align:center; font-weight:bold; font-size:16px;">시간</td>
-<td style="border:1px solid black; border-right:none; border-bottom:none; text-align:center; vertical-align:middle; font-size:17px; letter-spacing:1px;">{time_detail}</td>
-</tr>
-</table>
-<div style="text-align:center; padding:35px 0 0 0; border-top:1px solid black;">
-<div style="font-size:18px; font-weight:bold; margin-bottom:25px;">상기 학생의 {info['text']} 확인함.</div>
-<div style="font-size:18px; margin-bottom:22px; letter-spacing:2px;">{y} 년 &nbsp;&nbsp;&nbsp; {m} 월 &nbsp;&nbsp;&nbsp; {d} 일</div>
-<div style="font-size:18px; font-weight:bold; margin-bottom:28px; position:relative;">
-담당교사 : &nbsp;&nbsp; 오 정 은 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (인)
-{seal_html}
-</div>
-<div style="border-top:1px solid black; padding:15px 0; font-size:24px; font-weight:bold; letter-spacing:6px; background-color:white;">
-경 기 기 계 공 업 고 등 학 교
-</div>
-</div>
+<div style="width:520px; margin:10px auto; border:1px solid #000; padding:0; background:white; color:black; font-family:'Malgun Gothic', sans-serif;">
+    <div style="border-bottom:1px solid #000; background-color:#D9E1F2; padding:15px; text-align:center;">
+        <h1 style="margin:0; font-size:38px; letter-spacing:8px; font-weight:bold;">{info['title']}</h1>
+    </div>
+    <div style="background-color:#D9E1F2; height:45px; border-bottom:1px solid #000; display:flex; align-items:center; justify-content:center; font-size:17px; font-weight:bold; letter-spacing:1px;">
+        {dept}과 &nbsp;&nbsp; {grade}학년 &nbsp;&nbsp; {cls}반 &nbsp;&nbsp; {num}번 &nbsp;&nbsp; 성명 : {name}
+    </div>
+    <table style="width:100%; border-collapse:collapse; table-layout:fixed;">
+        <tr style="height:65px;">
+            <td style="width:20%; border-right:1px solid #000; border-bottom:1px solid #000; background:#f4f4f4; text-align:center; font-weight:bold; font-size:17px; letter-spacing:4px;">사유</td>
+            <td style="width:80%; border-bottom:1px solid #000; padding:10px 15px; text-align:left; vertical-align:middle; font-size:17px;">{row['사유']}</td>
+        </tr>
+        <tr style="height:65px;">
+            <td style="border-right:1px solid #000; border-bottom:1px solid #000; background:#f4f4f4; text-align:center; font-weight:bold; font-size:17px; letter-spacing:4px;">장소</td>
+            <td style="border-bottom:1px solid #000; padding:10px 15px; text-align:left; vertical-align:middle; font-size:17px;">{row['행선지']}</td>
+        </tr>
+        <tr style="height:65px;">
+            <td style="border-right:1px solid #000; background:#f4f4f4; text-align:center; font-weight:bold; font-size:17px; letter-spacing:4px;">시간</td>
+            <td style="padding:10px 15px; text-align:center; vertical-align:middle; font-size:19px; font-weight:bold; letter-spacing:1px;">{time_detail}</td>
+        </tr>
+    </table>
+    <div style="text-align:center; padding:35px 20px 0 20px; border-top:1px solid #000;">
+        <div style="font-size:19px; font-weight:bold; margin-bottom:25px;">상기 학생의 {info['text']} 확인함.</div>
+        <div style="font-size:18px; margin-bottom:22px; letter-spacing:2px;">{y} 년 &nbsp;&nbsp;&nbsp;&nbsp; {m} 월 &nbsp;&nbsp;&nbsp;&nbsp; {d} 일</div>
+        <div style="font-size:19px; font-weight:bold; margin-bottom:30px; position:relative;">
+            담당교사 : &nbsp;&nbsp;&nbsp; 오 정 은 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (인)
+            {seal_html}
+        </div>
+        <div style="border-top:1px solid #000; padding:15px 0; font-size:25px; font-weight:bold; letter-spacing:8px; background-color:white;">
+            경 기 기 계 공 업 고 등 학 교
+        </div>
+    </div>
 </div>
 """
     
-    # 미리보기 제목 설정 (예: 조퇴 증명서)
-    st.markdown(f"### 🖨️ {info['header']} 증명서")
+    st.markdown(f"### 🖨️ {info['header']} 증명서 확인")
     st.markdown(full_html, unsafe_allow_html=True)
-    
-    # 브라우저 인쇄창 호출
     components.html(f"<script>window.parent.print();</script>", height=0)
