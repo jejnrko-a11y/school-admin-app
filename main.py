@@ -73,6 +73,8 @@ def login_page():
             else:
                 st.error("비밀번호가 틀렸습니다.")
 
+# [위 부분은 동일]
+
 # ==========================================
 # 3. 메인 로직 및 내비게이션
 # ==========================================
@@ -81,14 +83,25 @@ if 'login_info' not in st.session_state:
 if 'page' not in st.session_state:
     st.session_state.page = "메인 홈"
 
-# [고정 버튼을 위한 전역 CSS]
+# [CSS 핵심 수정] 
+# 1. 고정 버튼 컨테이너를 브라우저 최상단에 박아버립니다.
+# 2. Streamlit의 메인 콘텐츠(st.main)에 상단 여백을 주어 버튼이 글자를 가리지 않게 합니다.
 st.markdown("""
     <style>
+    /* 브라우저 상단 50px 위치에 버튼 고정 */
     .fixed-home-btn {
         position: fixed;
-        top: 10px;
-        left: 10px;
+        top: 0px;
+        left: 0px;
+        width: 100%;
+        padding: 10px 20px;
+        background-color: white;
         z-index: 99999;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    /* 본문 콘텐츠가 버튼에 가려지지 않게 상단 여백 확보 */
+    [data-testid="stMainBlockContainer"] {
+        padding-top: 60px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -98,13 +111,15 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # 페이지 이동 시 고정 버튼 배치
+    # [수정] 모든 페이지에서 메인 홈이 아닐 때 상단에 버튼을 배치
     if st.session_state.page != "메인 홈":
         st.markdown('<div class="fixed-home-btn">', unsafe_allow_html=True)
         if st.button("⬅️ 메인 홈 돌아가기"):
             st.session_state.page = "메인 홈"
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
+
+    # ... (이하 메뉴 리스트 및 사이드바 로직은 동일)
 
     menu_list = ["메인 홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
     if user['name'] in ["교사", "관리자"]:
