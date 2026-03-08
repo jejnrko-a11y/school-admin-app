@@ -10,36 +10,57 @@ def show_page(conn):
     # ==========================================
     st.markdown("""
         <style>
-        /* [모바일 최적화] 표 폰트 크기 조정 및 가로폭 최대 활용 */
+        /* [모바일 최적화] 표 폰트 크기 조정 */
         [data-testid="stDataFrame"] {
             font-size: 12px !important;
         }
         
         /* [인쇄 최적화] @media print */
         @media print {
-            /* A4 세로 설정 및 여백 최적화 */
+            /* 1. 전체 용지 설정 (A4 세로) */
             @page {
                 size: A4 portrait;
                 margin: 10mm;
             }
             
-            /* 인쇄 시 숨길 요소들 (사이드바, 헤더, 입력 폼, 버튼, 푸터) */
-            header, [data-testid="stHeader"], [data-testid="stSidebar"], 
-            .stButton, div[data-testid="stForm"], .stTabs [role="tablist"],
-            hr, [data-testid="stDecoration"] {
+            /* 2. 인쇄 시 제외할 상단 요소들 (서류 현황 이전의 모든 것) */
+            header, [data-testid="stHeader"], [data-testid="stSidebar"], footer, [data-testid="stDecoration"] {
                 display: none !important;
             }
-            
-            /* 본문 영역 확장 */
+
+            /* 제목, 안내박스, 기록추가 섹션, 날짜선택, 입력폼, 구분선 숨김 */
+            .stTitle, .stInfo, [data-testid="stForm"], hr, .stButton {
+                display: none !important;
+            }
+
+            /* '기록 추가' 서브헤더와 그 위의 날짜 선택창을 감싸는 컨테이너 숨김 */
+            /* Streamlit의 특정 구조를 타겟팅하여 상단부 제거 */
+            div.element-container:has(label:contains("발생 날짜 선택")),
+            div.element-container:has(div:contains("➕ 기록 추가")) {
+                display: none !important;
+            }
+
+            /* 탭 메뉴의 버튼바(1월, 2월... 선택 줄) 숨김 - 내용만 나오게 함 */
+            .stTabs [role="tablist"] {
+                display: none !important;
+            }
+
+            /* 하단 기록 초기화(Expander) 숨김 */
+            [data-testid="stExpander"] {
+                display: none !important;
+            }
+
+            /* 3. 인쇄 시 보일 섹션(서류 현황) 최적화 */
             .main .block-container {
-                padding: 0 !important;
-                margin: 0 !important;
+                padding-top: 0 !important;
+                margin-top: 0 !important;
                 max-width: 100% !important;
             }
-            
-            /* 데이터프레임 너비 강제 확장 */
+
+            /* 표 너비 확장 및 잘림 방지 */
             div[data-testid="stDataFrame"] {
                 width: 100% !important;
+                height: auto !important;
             }
         }
         </style>
@@ -117,7 +138,7 @@ def show_page(conn):
                 "종류": category, "사유": reason_type, "교시": period_str, "비고": remark
             }])
             
-            # [수정] 데이터 병합 후 날짜순으로 정렬하여 최신 데이터가 아래로 가게 저장
+            # [날짜순 정렬] 최신 데이터가 시트 아래로 가도록 저장
             updated_special = pd.concat([df_special, new_row], ignore_index=True)
             updated_special = updated_special.sort_values(by=['날짜', '번호'], ascending=[True, True])
             
@@ -130,7 +151,7 @@ def show_page(conn):
     st.divider()
 
     # ---------------------------------------------------------
-    # PART 2: 월별 서류 대조 현황 (모바일 최적화 및 인쇄)
+    # PART 2: 월별 서류 대조 현황 (인쇄 영역)
     # ---------------------------------------------------------
     st.subheader("📋 월별 서류 현황")
 
@@ -169,7 +190,7 @@ def show_page(conn):
         df_view['교시표시'] = df_view.apply(lambda r: "결석" if r['종류'] == '결석' else str(r['교시']).replace(" ~ ", "-"), axis=1)
         df_view['월'] = df_view['날짜_dt'].dt.month
         
-        # [수정] 화면 표시 정렬: 날짜 오름차순(True)으로 변경하여 최근 날짜가 표 하단으로 가게 설정
+        # [화면 정렬] 날짜 오름차순으로 표 하단에 최신 데이터 배치
         df_view = df_view.sort_values(by=['날짜_dt', '번호'], ascending=[True, True])
         
         display_df = df_view[["3/8형식", "학생명", "종류", "사유", "교시표시", "비고", "제출여부", "월"]]
@@ -191,6 +212,7 @@ def show_page(conn):
                     c_title, c_print = st.columns([4, 1])
                     with c_title: st.markdown(f"#### 📑 {current_month}월 출결 현황 리스트")
                     with c_print:
+                        # window.parent.print()는 전체 창을 인쇄하되 CSS media print가 나머지를 가림
                         components.html(f"""
                             <button onclick="window.parent.print()" style="
                                 width: 100%; padding: 8px; background-color: #1E3A8A; 
@@ -198,7 +220,6 @@ def show_page(conn):
                                 font-weight: bold; font-size: 12px;">🖨️ 인쇄</button>
                         """, height=45)
                     
-                    # [모바일 최적화 및 비고란 줄바꿈 설정]
                     st.dataframe(
                         month_df.style.apply(style_rows, axis=1),
                         use_container_width=True,
@@ -210,7 +231,6 @@ def show_page(conn):
                             "사유": st.column_config.TextColumn("사유", width=50),
                             "교시표시": st.column_config.TextColumn("교시", width=80),
                             "제출여부": st.column_config.TextColumn("서류", width=70),
-                            # [UI 개선] 비고란의 width를 넓게 잡거나 너비 제한을 풀어 내용이 더 많이 보이게 설정
                             "비고": st.column_config.TextColumn("상세사유(비고)", width="large")
                         }
                     )
