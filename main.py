@@ -126,10 +126,10 @@ else:
 
 # 페이지별 라우팅
     if st.session_state.page == "메인 홈":
+        # [수정됨] markdown을 사용하여 줄바꿈(<br>) 적용 및 시간 굵게 처리
         now = get_kst()
         st.title(f"👋 {grade_str}학년 {cls_str}반 {user['name']}님")
-        st.write(f"📅 {now.year}년 {now.month}월 {now.day}일 &nbsp **현재시간 : {now.strftime('%H시 %M분')}**")
-        
+        st.markdown(f"📅 {now.year}년 {now.month}월 {now.day}일<br>현재시간 : **{now.strftime('%H시 %M분')}**", unsafe_allow_html=True)
         st.markdown("### 🚀 바로가기")
         # ... 이하 동일
         col1, col2 = st.columns(2)
