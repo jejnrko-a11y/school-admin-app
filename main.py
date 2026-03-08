@@ -83,7 +83,7 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    menu_list =["홈", "결석계 작성", "시간표", "자리배치", "비밀번호 변경"]
+    menu_list =["홈", "결석신고서 작성", "시간표", "자리배치", "비밀번호 변경"]
     if user['name'] in ["교사", "관리자"]:
         menu_list +=["교사용 출석체크", "교사용 결석계 확인"]
 
@@ -122,8 +122,8 @@ else:
         st.markdown("### 🚀 바로가기")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📝\n\n결석계 작성", use_container_width=True):
-                st.session_state.page = "결석계 작성"
+            if st.button("📝\n\n결석신고서 작성", use_container_width=True):
+                st.session_state.page = "결석신고서 작성"
                 st.rerun()
             if st.button("🪑\n\n자리배치", use_container_width=True):
                 st.session_state.page = "자리배치"
@@ -153,7 +153,7 @@ else:
         attendance.show_page(conn)
     elif st.session_state.page == "교사용 결석계 확인":
         teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
-    elif st.session_state.page == "결석계 작성":
+    elif st.session_state.page == "결석신고서 작성":
         absence.show_page(conn, user, FIXED_INFO, PATHS)
     elif st.session_state.page == "시간표":
         timetable.show_page(conn)
