@@ -103,7 +103,7 @@ else:
         st.session_state.page = "메인 홈"
 
     # 사이드바 
-    st.sidebar.title(f"👤 {user['name']}님")
+    st.sidebar.title(f"👤 {grade_str}학년 {cls_str}반 {user['name']}님")
     if user['name'] not in ["교사", "관리자", "테스트계정"]:
         st.sidebar.write(f"{FIXED_INFO['grade']}-{FIXED_INFO['cls']} {user['num']}번")
     
