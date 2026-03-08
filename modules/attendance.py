@@ -69,27 +69,20 @@ def show_page(conn):
     # ---------------------------------------------------------
     st.subheader("➕ 특이사항 기록 추가")
 
-    # [요일 판별 및 교시 옵션 설정]
-    # 사용자가 날짜를 바꿀 때 슬라이더가 자동으로 리셋되도록 세션 상태에 날짜 저장
     if 'prev_date' not in st.session_state:
         st.session_state.prev_date = get_kst().date()
 
-    # 날짜 입력 UI
     target_date = st.date_input("발생 날짜 선택", value=st.session_state.prev_date)
 
-    # 요일 계산 (0:월, 1:화, ...)
     weekday = target_date.weekday()
     period_options = ["조회", "1교시", "2교시", "3교시", "4교시", "5교시", "6교시"]
-    if weekday == 1: # 화요일일 때만 7교시 추가
-        period_options.append("7교시")
+    if weekday == 1: period_options.append("7교시")
     period_options.append("종례")
 
-    # [중요] 날짜가 바뀌었을 경우 슬라이더 값을 해당 요일의 전체 범위로 자동 리셋
     if target_date != st.session_state.prev_date:
         st.session_state.slider_val = (period_options[0], period_options[-1])
-        st.session_state.prev_date = target_date # 현재 날짜 업데이트
+        st.session_state.prev_date = target_date
 
-    # 슬라이더 기본값 보장 로직
     if 'slider_val' not in st.session_state:
         st.session_state.slider_val = (period_options[0], period_options[-1])
 
@@ -105,7 +98,6 @@ def show_page(conn):
         st.write("")
         st.markdown(f"##### ⏰ {target_date.strftime('%m/%d')} ({['월','화','수','목','금','토','일'][weekday]}) 교시 선택")
         
-        # 종류가 '결석'이면 강제로 전체 범위, 아니면 세션 상태(혹은 드래그값) 사용
         slider_value = (period_options[0], period_options[-1]) if category == "결석" else st.session_state.slider_val
 
         selected_range = st.select_slider(
@@ -125,9 +117,12 @@ def show_page(conn):
                 "종류": category, "사유": reason_type, "교시": period_str, "비고": remark
             }])
             
+            # [수정] 데이터 병합 후 날짜순으로 정렬하여 최신 데이터가 아래로 가게 저장
             updated_special = pd.concat([df_special, new_row], ignore_index=True)
+            updated_special = updated_special.sort_values(by=['날짜', '번호'], ascending=[True, True])
+            
             conn.update(worksheet="출결특이사항", data=updated_special)
-            st.session_state.slider_val = (period_options[0], period_options[-1]) # 추가 후 리셋
+            st.session_state.slider_val = (period_options[0], period_options[-1]) 
             st.cache_data.clear()
             st.success(f"✅ {s_name} 학생 기록 추가 완료!")
             st.rerun()
@@ -173,7 +168,9 @@ def show_page(conn):
         df_view['학생명'] = df_view['이름'] + "(" + df_view['번호'].astype(str).str.split('.').str[0] + ")"
         df_view['교시표시'] = df_view.apply(lambda r: "결석" if r['종류'] == '결석' else str(r['교시']).replace(" ~ ", "-"), axis=1)
         df_view['월'] = df_view['날짜_dt'].dt.month
-        df_view = df_view.sort_values(by=['날짜_dt', '번호'], ascending=[False, True])
+        
+        # [수정] 화면 표시 정렬: 날짜 오름차순(True)으로 변경하여 최근 날짜가 표 하단으로 가게 설정
+        df_view = df_view.sort_values(by=['날짜_dt', '번호'], ascending=[True, True])
         
         display_df = df_view[["3/8형식", "학생명", "종류", "사유", "교시표시", "비고", "제출여부", "월"]]
 
@@ -201,7 +198,7 @@ def show_page(conn):
                                 font-weight: bold; font-size: 12px;">🖨️ 인쇄</button>
                         """, height=45)
                     
-                    # [모바일 한눈에 보기 UI 적용]
+                    # [모바일 최적화 및 비고란 줄바꿈 설정]
                     st.dataframe(
                         month_df.style.apply(style_rows, axis=1),
                         use_container_width=True,
@@ -213,7 +210,8 @@ def show_page(conn):
                             "사유": st.column_config.TextColumn("사유", width=50),
                             "교시표시": st.column_config.TextColumn("교시", width=80),
                             "제출여부": st.column_config.TextColumn("서류", width=70),
-                            "비고": st.column_config.TextColumn("상세사유(비고)")
+                            # [UI 개선] 비고란의 width를 넓게 잡거나 너비 제한을 풀어 내용이 더 많이 보이게 설정
+                            "비고": st.column_config.TextColumn("상세사유(비고)", width="large")
                         }
                     )
         
