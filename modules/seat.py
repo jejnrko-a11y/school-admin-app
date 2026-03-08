@@ -1,11 +1,11 @@
-import streamlit st
+import streamlit as st
 import pandas as pd
 import random
 
 def show_page(conn, user):
     st.title("🪑 지능형 조건부 자리배치")
 
-    # --- 1. CSS 스타일 (칠판 하단 배치를 위한 마진 조정 포함) ---
+    # --- 1. CSS 스타일 (칠판 하단 배치를 위한 디자인) ---
     st.markdown("""
         <style>
         .blackboard {
@@ -44,25 +44,25 @@ def show_page(conn, user):
         st.error(f"데이터 로드 오류: {e}")
         return
 
-    fixed_x_coords = [(2, 4), (3, 4)] # E4, E5 고정석
+    fixed_x_coords = [(2, 4), (3, 4)] # E4, E5 고정석 (데이터상의 인덱스)
 
     # --- 3. 교사 전용 조건 설정 폼 ---
-    fb_pairs = [] # 앞뒤 짝궁 리스트
-    ss_pairs = [] # 양옆 짝궁 리스트
+    fb_pairs = [] 
+    ss_pairs = [] 
     cond_sep, cond_front, cond_back, cond_win, cond_hall = [], [], [], [], []
     
     if user['name'] == "교사":
         with st.expander("⚙️ 특별 자리배치 조건 설정 (셔플 시 적용)"):
             st.info("💡 각 짝궁은 2명씩 선택해 주세요. (최대 3커플씩 가능)")
             
-            # 앞뒤 짝궁 (세로 인접)
+            # 앞뒤 짝궁
             st.markdown('<p class="cond-label">↕️ 앞뒤 짝궁 지정 (세로로 인접)</p>', unsafe_allow_html=True)
             cols_fb = st.columns(3)
             for i in range(3):
                 p = cols_fb[i].multiselect(f"앞뒤 커플 {i+1}", all_students, max_selections=2, key=f"fb_{i}")
                 if len(p) == 2: fb_pairs.append(p)
 
-            # 양옆 짝궁 (가로 인접)
+            # 양옆 짝궁
             st.markdown('<p class="cond-label">↔️ 양옆 짝궁 지정 (가로로 인접)</p>', unsafe_allow_html=True)
             cols_ss = st.columns(3)
             for i in range(3):
@@ -91,7 +91,6 @@ def show_page(conn, user):
                         temp_grid = [["" for _ in range(5)] for _ in range(4)]
                         s_map = {}
                         s_idx = 0
-                        # 데이터 저장은 기존처럼 0행(앞자리) -> 3행(뒷자리) 순서로 수행
                         for r in range(4):
                             for c in range(5):
                                 if (r, c) in fixed_x_coords:
@@ -104,14 +103,20 @@ def show_page(conn, user):
                         
                         valid = True
                         for p in fb_pairs:
-                            pos1, pos2 = s_map[p[0]], s_map[p[1]]
-                            if not (pos1[1] == pos2[1] and abs(pos1[0] - pos2[0]) == 1):
-                                valid = False; break
+                            if p[0] in s_map and p[1] in s_map:
+                                pos1, pos2 = s_map[p[0]], s_map[p[1]]
+                                if not (pos1[1] == pos2[1] and abs(pos1[0] - pos2[0]) == 1):
+                                    valid = False; break
+                            else: valid = False; break
+                        
                         if valid:
                             for p in ss_pairs:
-                                pos1, pos2 = s_map[p[0]], s_map[p[1]]
-                                if not (pos1[0] == pos2[0] and abs(pos1[1] - pos2[1]) == 1):
-                                    valid = False; break
+                                if p[0] in s_map and p[1] in s_map:
+                                    pos1, pos2 = s_map[p[0]], s_map[p[1]]
+                                    if not (pos1[0] == pos2[0] and abs(pos1[1] - pos2[1]) == 1):
+                                        valid = False; break
+                                else: valid = False; break
+
                         if valid and cond_sep and len(cond_sep) > 1:
                             for i in range(len(cond_sep)):
                                 for j in range(i + 1, len(cond_sep)):
@@ -119,6 +124,7 @@ def show_page(conn, user):
                                     if abs(p1[0]-p2[0]) + abs(p1[1]-p2[1]) == 1:
                                         valid = False; break
                                 if not valid: break
+                        
                         if valid and cond_front and any(s_map[n][0] != 0 for n in cond_front): valid = False
                         if valid and cond_back and any(s_map[n][0] != 3 for n in cond_back): valid = False
                         if valid and cond_win and any(s_map[n][1] != 0 for n in cond_win): valid = False
@@ -140,7 +146,6 @@ def show_page(conn, user):
                 ordered = all_students.copy()
                 new_grid = [["" for _ in range(5)] for _ in range(4)]
                 s_idx = 0
-                # 1분단(c=0)부터 아래(r=0, 앞자리)에서 위(r=3, 뒷자리) 순으로 채움
                 for c in range(5):
                     for r in range(4):
                         if (r, c) in fixed_x_coords: new_grid[r][c] = "X"
@@ -152,20 +157,22 @@ def show_page(conn, user):
                 st.rerun()
 
     # --- 4. 시각적 출력 (교실 뒷편 시점) ---
-    # 학생 자리 출력: 4열(뒷자리)부터 1열(앞자리) 순으로 출력하여 화면 하단이 칠판이 되도록 함
+    # 4열(뒷자리)부터 1열(앞자리) 순서로 화면에 출력
     for r in reversed(range(4)):
         cols = st.columns(5)
         for c in range(5):
-            val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
+            try:
+                val = str(df_seat.iloc[r, c]) if not pd.isna(df_seat.iloc[r, c]) else ""
+            except:
+                val = ""
             with cols[c]:
                 if val == "X":
                     st.markdown('<div class="seat-card" style="background-color:#f0f0f0;"><div class="seat-x">X</div></div>', unsafe_allow_html=True)
-                elif val.strip() and val != "None":
+                elif val.strip() and val != "None" and val != "":
                     st.markdown(f'<div class="seat-card"><div class="seat-name">{val}</div></div>', unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="seat-card" style="border:1px dashed #ccc;"></div>', unsafe_allow_html=True)
 
-    # 교탁과 칠판을 학생 자리 아래에 배치
     st.markdown('<div class="teacher-desk">교 탁</div>', unsafe_allow_html=True)
     st.markdown('<div class="blackboard">칠 판 (앞)</div>', unsafe_allow_html=True)
     
