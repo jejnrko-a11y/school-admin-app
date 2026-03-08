@@ -105,7 +105,7 @@ def show_page(conn, user):
 
     # --- 2. 최상단 제목 표시 ---
     # st.title() 대신 HTML을 사용하여 최상단에 고정
-    st.markdown('<div class="main-title">컴퓨터전자 3-2반 자리배치</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">💡 컴퓨터전자 3-2반 자리배치</div>', unsafe_allow_html=True)
 
     # --- 3. 데이터 로드 ---
     try:
@@ -123,7 +123,7 @@ def show_page(conn, user):
 
     # --- 4. 교사용 관리 도구 (웹 전용) ---
     if user['name'] == "교사":
-        with st.expander("⚙️ 특별 자리배치 조건 설정"):
+        with st.expander("⚙️ 조건 설정"):
             st.info("💡 오른쪽(1분단)이 창가, 왼쪽(5분단)이 복도입니다.")
             
             fb_pairs, ss_pairs = [], []
@@ -145,7 +145,7 @@ def show_page(conn, user):
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            if st.button("🎲 조건부 자리 바꾸기", use_container_width=True):
+            if st.button("🎲 자리 셔플", use_container_width=True):
                 success = False
                 with st.spinner("계산 중..."):
                     for _ in range(20000):
@@ -198,7 +198,7 @@ def show_page(conn, user):
                 st.rerun()
 
         with c3:
-            if st.button("🖨️ 자리배치 인쇄", use_container_width=True):
+            if st.button("🖨️ 인쇄", use_container_width=True):
                 components.html("<script>window.parent.print();</script>", height=0)
 
     # --- 5. 시각적 출력 영역 ---
