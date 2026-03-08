@@ -124,8 +124,8 @@ def render_certificate(row, fixed_info):
     
     # 괄호 단어 및 확인 문구 설정
     type_map = {
-        "조퇴증": "조 퇴",
-        "외출증": "외 출",
+        "조퇴증": "조 퇴 증",
+        "외출증": "외 출 증",
         "교내활동증": "학생 교내 활동 확인"
     }
     display_type = type_map.get(row['종류'], "확 인")
@@ -146,7 +146,7 @@ def render_certificate(row, fixed_info):
 <h2 style="margin:0; font-size:22px; letter-spacing:5px;">( {display_type} )</h2>
 </div>
 <div style="background-color:#E7E6E6; height:40px; border-bottom:1.5px solid black; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:bold; letter-spacing:1px;">
-{dept}과 &nbsp; {grade}학년 &nbsp; {cls}반 &nbsp; {num}번 &nbsp; 성명 : {name}
+{dept} &nbsp; {grade}학년 &nbsp; {cls}반 &nbsp; {num}번 &nbsp; 성명 : {name}
 </div>
 <table style="width:100%; border-collapse:collapse;">
 <tr style="height:100px;">
