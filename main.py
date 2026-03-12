@@ -143,8 +143,9 @@ else:
             st.session_state.page = "조퇴/외출/교내활동증 신청"; st.rerun()
         if c5.button("🔐 비밀번호 변경", use_container_width=True): 
             st.session_state.page = "비밀번호 변경"; st.rerun()
-        # c6는 디자인 정렬을 위해 비워둠 (필요 시 추가 가능)
-
+        if c6.button("🎉 [이벤트]선거투표", use_container_width=True): 
+            st.session_state.page = "[이벤트]선거투표"; st.rerun()
+            
         # 👨‍🏫 교사용 (교사/관리자 전용)
         if user['name'] in ["교사", "관리자"]:
             st.markdown("---")
