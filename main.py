@@ -109,7 +109,7 @@ else:
     # 사이드바 설정
     with st.sidebar:
         st.title(f"👤 {user['name']}님")
-        menu_list = ["메인 홈", "시간표", "자리배치", "결석신고서 작성", "조퇴/외출/교내활동증 신청", "반장선거", "비밀번호 변경"]
+        menu_list = ["메인 홈", "시간표", "자리배치", "결석신고서 작성", "조퇴/외출/교내활동증 신청", "[이벤트]선거투표", "비밀번호 변경"]
         if user['name'] in ["교사", "관리자"]: 
             menu_list += ["[교사용]출석체크", "[교사용]결석계 다운로드", "[교사용]증명서 승인"]
         
@@ -175,6 +175,6 @@ else:
     elif st.session_state.page == "조퇴/외출/교내활동증 신청":
         issuance_user.show_page(conn, user, FIXED_INFO)
         # 기존 페이지 라우팅 로직 하단에 추가
-    elif st.session_state.page == "반장선거":
+    elif st.session_state.page == "[이벤트]선거투표":
         from modules import election
         election.show_page(conn, user)
