@@ -14,7 +14,7 @@ def get_shared_data(_conn):
         return None, None, None, str(e)
 
 def show_page(conn, user):
-    st.title("🎉 [이벤트] 반장선거")
+    st.title("🎉 [이벤트] 선거")
 
     # --- CSS: 칠판 스타일 ---
     st.markdown("""
