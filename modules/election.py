@@ -1,100 +1,82 @@
 import streamlit as st
 import pandas as pd
 import time
-from utils import get_kst, load_student_list
+from datetime import datetime, timedelta
+from streamlit_autorefresh import st_autorefresh
+from utils import get_kst
 
 def show_page(conn, user):
-    st.title("🗳️ 실시간 반장/부반장 선거")
+    # 1초마다 자동 새로고침 (실시간 타이머/상태 반영용)
+    st_autorefresh(interval=1000, key="elec_refresh")
     
-    # 1. 데이터 로드
-    try:
-        df_all = load_student_list(conn, exclude_admins=True) # 학생 명부 불러오기
-        df_elec = conn.read(worksheet="선거관리", ttl=0)
-        df_votes = conn.read(worksheet="선거_투표기록", ttl=0)
-        df_set = conn.read(worksheet="선거_설정", ttl=0)
-        
-        df_elec.columns = df_elec.columns.str.strip()
-        df_votes.columns = df_votes.columns.str.strip()
-        df_set.columns = df_set.columns.str.strip()
-    except Exception as e:
-        st.error(f"데이터 로드 실패: {e}")
-        return
-
-    # 2. 교사용 관리 UI
+    st.title("🗳️ 실시간 반장선거")
+    
+    # 데이터 로드
+    df_state = conn.read(worksheet="선거상태", ttl=0)
+    df_candidates = conn.read(worksheet="후보자명단", ttl=0)
+    df_votes = conn.read(worksheet="투표기록", ttl=0)
+    
+    status = df_state.at[0, '상태']
+    end_time_str = df_state.at[0, '종료시간']
+    
+    # --- 교사(관리자) 관리 영역 ---
     if user['name'] in ["교사", "관리자"]:
-        st.subheader("🛠️ 교사 관리 도구")
+        st.subheader("🛠️ 선거 관리 도구")
         
-        # [변경] 후보자 등록: 텍스트 입력 대신 명부에서 선택
-        with st.expander("➕ 후보자 즉석 등록"):
-            with st.form("add_candidate"):
-                # 학생 명부에서 이름 목록 가져오기
-                student_names = df_all['이름'].tolist()
-                selected_student = st.selectbox("후보 선택", student_names)
-                new_type = st.selectbox("구분", ["반장후보", "부반장후보"])
-                
+        with st.expander("후보자 등록"):
+            with st.form("add_cand"):
+                name = st.text_input("이름")
+                promise = st.text_input("공약")
                 if st.form_submit_button("등록"):
-                    # 중복 등록 방지
-                    if selected_student in df_elec['이름'].values:
-                        st.error("이미 등록된 후보입니다.")
-                    else:
-                        new_df = pd.DataFrame([{
-                            "구분": new_type, 
-                            "기호": len(df_elec) + 1, 
-                            "이름": selected_student, 
-                            "공약": "공약없음", 
-                            "득표수": 0
-                        }])
-                        conn.update(worksheet="선거관리", data=pd.concat([df_elec, new_df], ignore_index=True))
-                        st.rerun()
+                    new_cand = pd.DataFrame([{'기호': len(df_candidates)+1, '이름': name, '공약': promise, '득표수': 0}])
+                    conn.update(worksheet="후보자명단", data=pd.concat([df_candidates, new_cand]))
+                    st.rerun()
 
-        # 투표 상태 변경
-        current_status = df_set.iloc[0]['상태']
-        if st.button(f"현재 상태: {current_status} (클릭하여 변경)"):
-            new_status = "종료" if current_status == "진행중" else "진행중"
-            df_set.at[0, '상태'] = new_status
-            conn.update(worksheet="선거_설정", data=df_set)
+        if status != "진행중" and st.button("🚀 선거 시작 (2분)"):
+            end_time = get_kst() + timedelta(minutes=2)
+            df_state.at[0, '상태'] = "진행중"
+            df_state.at[0, '종료시간'] = end_time.strftime("%Y-%m-%d %H:%M:%S")
+            conn.update(worksheet="선거상태", data=df_state)
             st.rerun()
 
-        # 결과 카운트 다운
-        if st.button("📊 결과 긴장감 있게 보기"):
-            st.write("### 득표 현황 카운트다운!")
-            chart_placeholder = st.empty()
-            for i in range(11): 
-                temp_df = df_elec.copy()
-                temp_df['득표수'] = (temp_df['득표수'] * (i/10)).astype(int)
-                chart_placeholder.bar_chart(temp_df.set_index('이름')['득표수'])
-                time.sleep(0.05)
+        if status == "종료" and st.button("📊 결과 발표 (긴장감 모드)"):
+            st.write("### 🥁 선거 결과 발표 중...")
+            bar_container = st.empty()
+            # 1위부터 순차적 공개 연출
+            sorted_df = df_candidates.sort_values('득표수', ascending=True)
+            for i in range(1, len(sorted_df) + 1):
+                time.sleep(1.5)
+                bar_container.bar_chart(sorted_df.tail(i).set_index('이름')['득표수'])
+            st.balloons()
+        return
+
+    # --- 학생 UI 영역 ---
+    if status == "진행전":
+        st.info("현재 진행 중인 선거가 없습니다.")
+    elif status == "진행중":
+        # 타이머 로직
+        end_time = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M:%S")
+        remaining = end_time - get_kst()
+        
+        if remaining.total_seconds() > 0:
+            mins, secs = divmod(int(remaining.total_seconds()), 60)
+            st.metric("남은 시간", f"{mins:02d}:{secs:02d}")
             
-            # 기권자 명단 출력
-            voted_nums = df_votes['번호'].unique().tolist()
-            abstainers = df_all[~df_all['번호'].isin(voted_nums)]
-            st.warning(f"기권자: {', '.join(abstainers['이름'].tolist())}")
-        return
-
-    # 3. 학생 투표 UI
-    if df_set.iloc[0]['상태'] == "종료":
-        st.error("🚫 투표가 종료되었습니다.")
-        return
-
-    election_type = st.radio("선거 선택", ["반장선거", "부반장선거"], horizontal=True)
-    target_type = "반장후보" if election_type == "반장선거" else "부반장후보"
-    candidates = df_elec[df_elec['구분'] == target_type]
-
-    # 이미 투표했는지 체크
-    has_voted = not df_votes[(df_votes['선거종류'] == election_type) & 
-                             (df_votes['번호'].astype(str) == str(user['num']))].empty
-
-    if has_voted:
-        st.success(f"✅ {election_type} 투표를 완료하셨습니다.")
-    else:
-        st.info("💡 후보자의 공약을 확인하고 투표해 주세요.")
-        for _, row in candidates.iterrows():
-            with st.container(border=True):
-                st.subheader(f"기호 {row['기호']}. {row['이름']}")
-                st.write(f"공약: {row['공약']}")
-                if st.button(f"{row['이름']}에게 투표하기", key=f"v_{row['기름']}"):
-                    df_elec.loc[df_elec['이름']==row['이름'], '득표수'] += 1
-                    conn.update(worksheet="선거관리", data=df_elec)
-                    new_vote = pd.DataFrame([{"번호": user['num'], "이름": user['name'], "선거종류": election_type, "투표일시": get_kst().strftime("%H:%M")}])
-                    conn.update(worksheet="선거_투표기록", data=pd.concat([df_votes, new_vote], ignore_index=True))
+            # 투표 확인
+            if not df_votes[(df_votes['학번'] == user['num']) & (df_votes['투표완료여부'] == "O")].empty:
+                st.success("✅ 투표를 완료하셨습니다.")
+            else:
+                choice = st.radio("후보 선택", df_candidates['이름'])
+                if st.button("투표 제출"):
+                    df_candidates.loc[df_candidates['이름'] == choice, '득표수'] += 1
+                    conn.update(worksheet="후보자명단", data=df_candidates)
+                    new_vote = pd.DataFrame([{'학번': user['num'], '이름': user['name'], '투표완료여부': 'O'}])
+                    conn.update(worksheet="투표기록", data=pd.concat([df_votes, new_vote]))
                     st.rerun()
+        else:
+            # 시간 종료 시 자동 상태 변경
+            df_state.at[0, '상태'] = "종료"
+            conn.update(worksheet="선거상태", data=df_state)
+            st.rerun()
+    else:
+        st.warning("선거가 종료되었습니다.")
