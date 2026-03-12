@@ -2,17 +2,6 @@ import streamlit as st
 import pandas as pd
 from utils import load_student_list
 
-# --- 1. API 호출 한도 방지: 안정적인 캐싱 ---
-@st.cache_data(ttl=4) # 4초마다 한 번씩만 구글 시트를 읽음 (분당 최대 15회 호출로 60회 제한 절대 안 걸림)
-def get_shared_data(_conn):
-    try:
-        df_state = _conn.read(worksheet="선거상태", ttl=4)
-        df_db = _conn.read(worksheet="선거데이터", ttl=4)
-        all_students = load_student_list(_conn, exclude_admins=True)
-        return df_state, df_db, all_students, None
-    except Exception as e:
-        return None, None, None, str(e)
-
 def show_page(conn, user):
     st.title("🎉 [🎉 이벤트] 반장선거")
 
@@ -27,16 +16,18 @@ def show_page(conn, user):
         </style>
     """, unsafe_allow_html=True)
 
-    # --- 2. 데이터 로드 및 에러 방어 ---
-    df_state, df_db, all_students, err_msg = get_shared_data(conn)
-    
-    if df_state is None:
-        st.error("⚠️ 구글 시트 데이터를 불러오지 못했습니다.")
-        st.code(err_msg) # 실제 에러 내용 출력
-        st.info("💡 해결 안내: \n1. 'RATE_LIMIT_EXCEEDED' 에러인 경우 1분만 기다리시면 자동으로 접속됩니다.\n2. 구글 시트에 '선거상태', '선거데이터' 탭 이름이 정확한지 확인해 주세요.")
+    # --- 1. 안전한 데이터 로드 (자체 TTL 캐싱 활용) ---
+    # conn.read의 ttl=5 덕분에 아무리 새로고침을 연타해도 5초에 1번만 구글에 요청을 보냅니다.
+    try:
+        df_state = conn.read(worksheet="선거상태", ttl=5)
+        df_db = conn.read(worksheet="선거데이터", ttl=5)
+        all_students = load_student_list(conn, exclude_admins=True)
+    except Exception as e:
+        st.error("⚠️ 구글 시트 접근 제한(API 초과)이 발생했습니다.")
+        st.info("💡 캐시 초기화로 인해 발생한 일시적 현상입니다. 딱 1분만 기다렸다가 [새로고침] 해주시면 정상 작동합니다!")
         return
 
-    # 데이터 정제
+    # 데이터 정제 및 병합
     all_students['번호'] = pd.to_numeric(all_students['번호'], errors='coerce').fillna(0).astype(int)
     
     df_data = pd.merge(all_students[['번호', '이름']], df_db, on=['번호', '이름'], how='left')
@@ -49,28 +40,27 @@ def show_page(conn, user):
     candidates = df_data[df_data['역할'] == '후보'].copy().reset_index(drop=True)
     candidates['기호'] = range(1, len(candidates) + 1)
 
-    # --- 3. 교사용 제어 패널 ---
+    # --- 2. 교사용 제어 패널 ---
     if user['name'] in ['교사', '관리자']:
         with st.expander("🛠 교사용 제어 패널", expanded=True):
             c1, c2, c3, c4 = st.columns(4)
             
-            # 교사용 버튼은 자주 누르지 않으므로 즉각 반영을 위해 clear() 유지
             if c1.button("▶ 투표 시작"): 
                 conn.update(worksheet="선거상태", data=pd.DataFrame([{'상태': '진행중'}]))
-                st.cache_data.clear(); st.rerun()
+                st.success("✅ 투표가 시작되었습니다! (최대 5초 내 화면 반영)"); st.rerun()
                 
             if c2.button("■ 투표 종료"): 
                 conn.update(worksheet="선거상태", data=pd.DataFrame([{'상태': '종료'}]))
-                st.cache_data.clear()
                 st.session_state.show_results = False
-                st.rerun()
+                st.success("✅ 투표가 종료되었습니다! (최대 5초 내 화면 반영)"); st.rerun()
                 
             if c3.button("🔄 리셋"):
-                df_data[['역할', '투표완료여부', '득표수']] = ['일반', 'X', 0]
+                df_data[['역할', '투표완료여부', '득표수']] =['일반', 'X', 0]
                 final_df = df_data[['번호', '이름', '역할', '투표완료여부', '득표수']]
                 conn.update(worksheet="선거데이터", data=final_df)
                 conn.update(worksheet="선거상태", data=pd.DataFrame([{'상태': '대기'}]))
-                st.cache_data.clear(); st.session_state.show_results = False; st.rerun()
+                st.session_state.show_results = False
+                st.success("✅ 초기화 완료! (최대 5초 내 화면 반영)"); st.rerun()
                 
             if c4.button("👥 투표자 확인"): 
                 st.session_state.show_voters = not getattr(st.session_state, 'show_voters', False)
@@ -84,9 +74,9 @@ def show_page(conn, user):
                 df_data.loc[df_data['이름'] == selected, '역할'] = '후보'
                 final_df = df_data[['번호', '이름', '역할', '투표완료여부', '득표수']]
                 conn.update(worksheet="선거데이터", data=final_df)
-                st.cache_data.clear(); st.success(f"{selected} 후보 등록 완료!"); st.rerun()
+                st.success(f"✅ {selected} 후보 등록 완료! (구글 시트 동기화 중... 최대 5초 내 칠판에 나타납니다)"); st.rerun()
 
-    # --- 4. 칠판 UI ---
+    # --- 3. 칠판 UI ---
     chalk = f"<h2>{'⏳ 투표 대기 중' if status=='대기' else '🗳️ 투표 진행 중' if status=='진행중' else '🏁 투표가 종료되었습니다.'}</h2>"
     
     if status == "대기":
@@ -114,7 +104,7 @@ def show_page(conn, user):
 
     st.markdown(f'<div class="chalkboard">{chalk}</div>', unsafe_allow_html=True)
 
-    # --- 5. 학생 투표 로직 ---
+    # --- 4. 학생 투표 로직 ---
     if status == "진행중" and user['name'] not in ['교사', '관리자']:
         my_idx = df_data[df_data['이름'] == user['name']].index
         
@@ -126,7 +116,6 @@ def show_page(conn, user):
             
             if st.button("투표 제출"):
                 if choice != '기권':
-                    # 이름 안전하게 추출
                     selected_name = choice.split(". ")[1]
                     cand_idx = df_data[df_data['이름'] == selected_name].index[0]
                     df_data.at[cand_idx, '득표수'] += 1
@@ -136,5 +125,4 @@ def show_page(conn, user):
                 final_df = df_data[['번호', '이름', '역할', '투표완료여부', '득표수']]
                 conn.update(worksheet="선거데이터", data=final_df)
                 
-                # [핵심] 학생 투표 시에는 st.cache_data.clear()를 하지 않음! (API 한도 초과 방지)
                 st.success("투표가 완료되었습니다!"); st.rerun()
