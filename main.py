@@ -25,7 +25,7 @@ dept_str = str(FIXED_INFO['dept']).replace('.0', '')
 grade_str = str(FIXED_INFO['grade']).replace('.0', '')
 cls_str = str(FIXED_INFO['cls']).replace('.0', '')
 
-# [CSS: Sticky 상단 고정 방식 및 겹침 방지]
+#[CSS: Sticky 상단 고정 방식 및 겹침 방지]
 st.markdown("""
     <style>
     /* 1. 마커가 들어간 컨테이너는 화면에서 숨김 */
@@ -98,29 +98,25 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    #[상단 고정 버튼 렌더링]
+    # [상단 고정 버튼 렌더링 - 홈 & 새로고침]
     if st.session_state.page != "메인 홈":
-        # 고정시킬 영역 바로 위에 sticky 마커 삽입
         st.markdown('<div class="sticky-marker"></div>', unsafe_allow_html=True)
         
-        # 컬럼을 2개로 나누어 50:50 비율로 배치
         top_col1, top_col2 = st.columns(2)
-        
         with top_col1:
             if st.button("⬅️ 메인 홈 돌아가기", use_container_width=True): 
                 st.session_state.page = "메인 홈"
                 st.rerun()
-                
         with top_col2:
             if st.button("🔄 현재 화면 새로고침", use_container_width=True): 
-                # 다른 처리 없이 rerun()만 호출하면 현재 페이지 데이터를 다시 불러옴
-                st.cache_data.clear() # 최신 데이터를 불러오기 위해 캐시도 깔끔하게 초기화
+                st.cache_data.clear() # 최신 데이터를 불러오기 위해 캐시 초기화
                 st.rerun()
 
     # 사이드바 설정
     with st.sidebar:
         st.title(f"👤 {user['name']}님")
-        menu_list = ["메인 홈", "시간표", "자리배치", "결석신고서 작성", "조퇴/외출/교내활동증 신청", "[이벤트]선거투표", "비밀번호 변경"]
+        menu_list =["메인 홈", "시간표", "자리배치", "결석신고서 작성", "조퇴/외출/교내활동증 신청", "[이벤트]선거투표", "비밀번호 변경"]
+        
         if user['name'] in ["교사", "관리자"]: 
             menu_list += ["[교사용]출석체크", "[교사용]결석계 다운로드", "[교사용]증명서 승인"]
         
@@ -133,7 +129,9 @@ else:
             st.session_state.clear()
             st.rerun()
 
-    # 페이지 라우팅
+    # ==========================================
+    # 4. 페이지 이동 라우팅
+    # ==========================================
     if st.session_state.page == "메인 홈":
         st.markdown(f"<h1 style='font-size: 2.0rem;'>👋 {grade_str}학년 {cls_str}반 {user['name']}님</h1>", unsafe_allow_html=True)
         now = get_kst()
@@ -150,7 +148,7 @@ else:
             st.session_state.page = "결석신고서 작성"; st.rerun()
         
         c4, c5, c6 = st.columns(3)
-        if c4.button("📜 조퇴/외출/교내활동증 신청", use_container_width=True): 
+        if c4.button("📜 조퇴/외출증 신청", use_container_width=True): 
             st.session_state.page = "조퇴/외출/교내활동증 신청"; st.rerun()
         if c5.button("🔐 비밀번호 변경", use_container_width=True): 
             st.session_state.page = "비밀번호 변경"; st.rerun()
@@ -158,7 +156,7 @@ else:
             st.session_state.page = "[이벤트]선거투표"; st.rerun()
             
         # 👨‍🏫 교사용 (교사/관리자 전용)
-        if user['name'] in ["교사", "관리자"]:
+        if user['name'] in["교사", "관리자"]:
             st.markdown("---")
             st.markdown("### 👨‍🏫 교사용")
             tc1, tc2, tc3 = st.columns(3)
@@ -169,7 +167,7 @@ else:
             if tc3.button("✅ 증명서 승인", use_container_width=True): 
                 st.session_state.page = "[교사용]증명서 승인"; st.rerun()
 
-    # 페이지 이동 로직
+    # 페이지 이동 로직 (모듈 연결)
     elif st.session_state.page == "[교사용]출석체크": 
         attendance.show_page(conn)
     elif st.session_state.page == "[교사용]결석계 다운로드": 
@@ -186,7 +184,6 @@ else:
         seat.show_page(conn, user)
     elif st.session_state.page == "조퇴/외출/교내활동증 신청":
         issuance_user.show_page(conn, user, FIXED_INFO)
-        # 기존 페이지 라우팅 로직 하단에 추가
     elif st.session_state.page == "[이벤트]선거투표":
         from modules import election
         election.show_page(conn, user)
