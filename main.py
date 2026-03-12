@@ -98,13 +98,24 @@ if st.session_state.login_info is None:
 else:
     user = st.session_state.login_info
     
-    # [상단 고정 버튼 렌더링]
+    #[상단 고정 버튼 렌더링]
     if st.session_state.page != "메인 홈":
-        # 고정시킬 버튼 바로 위에 sticky 마커 삽입
+        # 고정시킬 영역 바로 위에 sticky 마커 삽입
         st.markdown('<div class="sticky-marker"></div>', unsafe_allow_html=True)
-        if st.button("⬅️ 메인 홈 돌아가기"): 
-            st.session_state.page = "메인 홈"
-            st.rerun()
+        
+        # 컬럼을 2개로 나누어 50:50 비율로 배치
+        top_col1, top_col2 = st.columns(2)
+        
+        with top_col1:
+            if st.button("⬅️ 메인 홈 돌아가기", use_container_width=True): 
+                st.session_state.page = "메인 홈"
+                st.rerun()
+                
+        with top_col2:
+            if st.button("🔄 현재 화면 새로고침", use_container_width=True): 
+                # 다른 처리 없이 rerun()만 호출하면 현재 페이지 데이터를 다시 불러옴
+                st.cache_data.clear() # 최신 데이터를 불러오기 위해 캐시도 깔끔하게 초기화
+                st.rerun()
 
     # 사이드바 설정
     with st.sidebar:
