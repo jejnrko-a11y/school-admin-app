@@ -2,13 +2,12 @@ import streamlit as st
 import pandas as pd
 import time
 from datetime import datetime, timedelta
-from utils import get_kst
+from utils import get_kst, load_student_list
 
-# API 호출을 최소화하기 위한 캐싱 함수
 @st.cache_data(ttl=5)
 def get_data(_conn):
     try:
-        # 데이터가 없을 경우를 대비해 기본 데이터프레임 구조 생성
+        # 데이터가 없을 경우를 대비해 기본 구조 설정
         state = _conn.read(worksheet="선거상태", ttl=0)
         if state.empty or '상태' not in state.columns:
             state = pd.DataFrame([{'상태': '진행전', '종료시간': '2026-03-12 23:30:00'}])
@@ -20,7 +19,7 @@ def get_data(_conn):
     except Exception as e:
         return {
             "state": pd.DataFrame([{'상태': '진행전', '종료시간': '2026-03-12 23:30:00'}]),
-            "candidates": pd.DataFrame(columns=['기호', '이름', '공약', '득표수']),
+            "candidates": pd.DataFrame(columns=['기호', '이름', '득표수']),
             "votes": pd.DataFrame(columns=['학번', '이름', '투표완료여부'])
         }
 
@@ -30,20 +29,20 @@ def show_page(conn, user):
     # 1. 데이터 로드
     data = get_data(conn)
     df_state, df_candidates, df_votes = data['state'], data['candidates'], data['votes']
-    
     status = df_state.at[0, '상태']
-    end_time_str = df_state.at[0, '종료시간']
     
     # --- 교사 관리 영역 ---
     if user['name'] in ["교사", "관리자"]:
         st.subheader("🛠️ 교사 관리 도구")
         
+        # [변경] 학생명부를 불러와서 이름 선택으로 변경
+        student_list = load_student_list(conn, exclude_admins=True)
+        
         with st.expander("➕ 후보자 등록"):
             with st.form("add_cand"):
-                name = st.text_input("이름")
-                promise = st.text_input("공약")
+                selected_name = st.selectbox("후보자 선택", student_list['이름'].tolist())
                 if st.form_submit_button("등록"):
-                    new_cand = pd.DataFrame([{'기호': len(df_candidates)+1, '이름': name, '공약': promise, '득표수': 0}])
+                    new_cand = pd.DataFrame([{'기호': len(df_candidates)+1, '이름': selected_name, '득표수': 0}])
                     conn.update(worksheet="후보자명단", data=pd.concat([df_candidates, new_cand], ignore_index=True))
                     st.cache_data.clear()
                     st.rerun()
@@ -56,7 +55,11 @@ def show_page(conn, user):
             st.cache_data.clear()
             st.rerun()
 
-        if status == "종료" and st.button("📊 결과 발표 (박진감 모드)"):
+        # [실시간 업데이트] 현재 후보자 현황
+        st.subheader("📋 실시간 후보 현황")
+        st.table(df_candidates[['기호', '이름', '득표수']])
+
+        if status == "종료" and st.button("📊 결과 발표"):
             st.write("### 🥁 선거 결과 발표 중...")
             bar_container = st.empty()
             sorted_df = df_candidates.sort_values('득표수', ascending=True)
@@ -68,18 +71,14 @@ def show_page(conn, user):
         return
 
     # --- 학생 투표 영역 ---
-    if status == "진행전":
-        st.info("현재 진행 중인 선거가 없습니다.")
-    
-    elif status == "진행중":
-        end_time = datetime.strptime(str(end_time_str), "%Y-%m-%d %H:%M:%S")
+    if status == "진행중":
+        end_time = datetime.strptime(str(df_state.at[0, '종료시간']), "%Y-%m-%d %H:%M:%S")
         remaining = end_time - get_kst()
         
         if remaining.total_seconds() > 0:
             mins, secs = divmod(int(remaining.total_seconds()), 60)
-            st.metric("남은 시간", f"{mins:02d}:{secs:02d}")
+            st.metric("⏳ 남은 시간", f"{mins:02d}:{secs:02d}")
             
-            # 투표 여부 확인
             if not df_votes.empty and not df_votes[(df_votes['학번'] == user['num']) & (df_votes['투표완료여부'] == "O")].empty:
                 st.success("✅ 이미 투표를 완료하셨습니다.")
             else:
@@ -97,10 +96,8 @@ def show_page(conn, user):
             conn.update(worksheet="선거상태", data=df_state)
             st.cache_data.clear()
             st.rerun()
-            
-    else: # 종료
-        st.warning("선거가 종료되었습니다.")
-        
-    # 5초마다 새로고침 유도
+    else:
+        st.warning(f"현재 선거 상태: {status}")
+    
     time.sleep(5)
     st.rerun()
