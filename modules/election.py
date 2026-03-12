@@ -1,57 +1,180 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
+from modules import absence, teacher_admin, settings, timetable, attendance, seat, issuance_user, issuance_admin
+from utils import get_kst, load_class_info, load_student_list
 import pandas as pd
-from utils import get_kst, load_class_info
 
-def show_page(conn, user):
-    st.title("🗳️ 반장선거")
+# ==========================================
+# 1. 초기 설정 및 보안 로드
+# ==========================================
+st.set_page_config(page_title="학교 생활 도우미", layout="centered")
+
+ADMIN_PASSWORD = st.secrets.get("auth", {}).get("admin_password", "0000") 
+PATHS = {"font": "NanumGothic-Regular.ttf", "bold_font": "NanumGothic-Bold.ttf", "bg": "background.png"}
+
+# 서비스 연결
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except Exception as e:
+    st.error(f"데이터베이스 연결 실패: {e}")
+    st.stop()
+
+# 동적 학급 정보 로드
+FIXED_INFO = load_class_info(conn)
+dept_str = str(FIXED_INFO['dept']).replace('.0', '')
+grade_str = str(FIXED_INFO['grade']).replace('.0', '')
+cls_str = str(FIXED_INFO['cls']).replace('.0', '')
+
+# [CSS: Sticky 상단 고정 방식 및 겹침 방지]
+st.markdown("""
+    <style>
+    /* 1. 마커가 들어간 컨테이너는 화면에서 숨김 */
+    div.element-container:has(.sticky-marker) {
+        display: none;
+    }
     
-    # 데이터 로드
-    df_candidates = conn.read(worksheet="반장선거_후보", ttl=0)
-    df_votes = conn.read(worksheet="반장선거_투표기록", ttl=0)
-    class_info = load_class_info(conn)
+    /* 2. 마커 바로 다음 요소(버튼)를 본문 상단에 '찰싹(Sticky)' 고정 */
+    div.element-container:has(.sticky-marker) + div.element-container {
+        position: sticky;
+        top: 60px; /* Streamlit 헤더 아래 위치 */
+        z-index: 9999; /* 가장 위에 떠 있도록 설정 */
+        background-color: white !important; /* 투명도 없는 완벽한 흰색 배경 */
+        width: 100% !important; /* ★ 가로 전체를 덮어서 옆으로 글자가 새어나오지 않게 차단 */
+        display: block !important;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #f0f2f6;
+        margin-bottom: 15px; /* 고정 영역 아래에 약간의 여백 추가 */
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# 2. 로그인 페이지
+# ==========================================
+def login_page():
+    st.markdown(f"<h1 style='font-size: 1.8rem; margin-bottom: 18px;'>🏫 경기기계공업고 {dept_str} {grade_str}학년 {cls_str}반 인증</h1>", unsafe_allow_html=True)
+    df_all_users = load_student_list(conn, exclude_admins=False)
     
-    # 투표 여부 체크
-    has_voted = not df_votes[df_votes['번호'] == user['num']].empty
-    
-    # 관리자/교사 전용 대시보드
-    if user['name'] in ["교사", "관리자"]:
-        st.subheader("📊 선거 진행 상황")
-        
-        # 투표율 계산
-        total_students = class_info['student_count']
-        current_votes = len(df_votes)
-        col1, col2 = st.columns(2)
-        col1.metric("투표율", f"{(current_votes/total_students)*100:.1f}%", f"{current_votes}/{total_students}명")
-        
-        # 시각화
-        chart_data = df_candidates.set_index('이름')['득표수']
-        st.bar_chart(chart_data)
-        
-        st.divider()
-        st.subheader("📋 후보 목록 (교사용)")
-        st.dataframe(df_candidates)
+    if df_all_users.empty: 
+        st.error("⚠️ 학생 명부를 불러오지 못했습니다.")
         return
 
-    # 학생 화면
-    if has_voted:
-        st.success("✅ 이미 투표를 완료하셨습니다. 결과 발표를 기다려 주세요.")
-    else:
-        st.info("💡 후보자의 공약을 확인하고 투표해 주세요.")
-        
-    for _, row in df_candidates.iterrows():
-        with st.container(border=True):
-            st.markdown(f"### 기호 {row['기호']}. {row['이름']}")
-            st.write(f"**공약:** {row['공약']}")
-            
-            if st.button(f"{row['이름']}에게 투표하기", key=f"vote_{row['기호']}", disabled=has_voted):
-                # 1. 득표수 업데이트
-                df_candidates.loc[df_candidates['기호'] == row['기호'], '득표수'] += 1
-                conn.update(worksheet="반장선거_후보", data=df_candidates)
-                
-                # 2. 투표 기록 추가 (비밀 투표 보장: 누구에게 투표했는지는 저장하지 않음)
-                new_vote = pd.DataFrame([{
-                    "번호": user['num'], "이름": user['name'], "투표일시": get_kst().strftime("%Y-%m-%d %H:%M:%S")
-                }])
-                conn.update(worksheet="반장선거_투표기록", data=pd.concat([df_votes, new_vote], ignore_index=True))
-                
+    student_options = []
+    for _, row in df_all_users.iterrows():
+        name = str(row['이름']).strip()
+        num_raw = str(row['번호']).replace('.0', '')
+        if num_raw == 'nan' or name in ['교사', '테스트계정', '관리자']: 
+            student_options.append(name)
+        else: 
+            student_options.append(f"{name}({num_raw}번)")
+    
+    with st.container(border=True):
+        selected_user = st.selectbox("본인의 이름을 선택하세요", student_options)
+        pw_input = st.text_input("비밀번호", type="password")
+        if st.button("로그인", use_container_width=True):
+            user_data = df_all_users[df_all_users['이름'] == selected_user.split("(")[0]].iloc[0]
+            db_pw = str(user_data['비밀번호']).strip().split('.')[0]
+            if str(pw_input).strip() == db_pw:
+                st.session_state.login_info = {
+                    "name": selected_user.split("(")[0], 
+                    "num": 0 if str(user_data['번호']) == 'nan' else int(float(str(user_data['번호'])))
+                }
+                st.session_state.page = "메인 홈"
                 st.rerun()
+            else: 
+                st.error("비밀번호가 틀렸습니다.")
+
+# ==========================================
+# 3. 메인 로직 및 페이지 라우팅
+# ==========================================
+if 'login_info' not in st.session_state: 
+    st.session_state.login_info = None
+if 'page' not in st.session_state: 
+    st.session_state.page = "메인 홈"
+
+if st.session_state.login_info is None:
+    login_page()
+else:
+    user = st.session_state.login_info
+    
+    # [상단 고정 버튼 렌더링]
+    if st.session_state.page != "메인 홈":
+        # 고정시킬 버튼 바로 위에 sticky 마커 삽입
+        st.markdown('<div class="sticky-marker"></div>', unsafe_allow_html=True)
+        if st.button("⬅️ 메인 홈 돌아가기"): 
+            st.session_state.page = "메인 홈"
+            st.rerun()
+
+    # 사이드바 설정
+    with st.sidebar:
+        st.title(f"👤 {user['name']}님")
+        menu_list = ["메인 홈", "시간표", "자리배치", "결석신고서 작성", "조퇴/외출/교내활동증 신청", "반장선거", "비밀번호 변경"]
+        if user['name'] in ["교사", "관리자"]: 
+            menu_list += ["[교사용]출석체크", "[교사용]결석계 다운로드", "[교사용]증명서 승인"]
+        
+        selected = st.radio("메뉴", menu_list, index=menu_list.index(st.session_state.page) if st.session_state.page in menu_list else 0)
+        if selected != st.session_state.page: 
+            st.session_state.page = selected
+            st.rerun()
+            
+        if st.button("로그아웃", use_container_width=True): 
+            st.session_state.clear()
+            st.rerun()
+
+    # 페이지 라우팅
+    if st.session_state.page == "메인 홈":
+        st.markdown(f"<h1 style='font-size: 2.0rem;'>👋 {grade_str}학년 {cls_str}반 {user['name']}님</h1>", unsafe_allow_html=True)
+        now = get_kst()
+        st.markdown(f"📅 {now.year}년 {now.month}월 {now.day}일<br>현재시간 : **{now.strftime('%H시 %M분')}**", unsafe_allow_html=True)
+        
+        # 🚀 바로가기 (학생/교사 공통)
+        st.markdown("### 🚀 바로가기")
+        c1, c2, c3 = st.columns(3)
+        if c1.button("📅 시간표", use_container_width=True): 
+            st.session_state.page = "시간표"; st.rerun()
+        if c2.button("🪑 자리배치", use_container_width=True): 
+            st.session_state.page = "자리배치"; st.rerun()
+        if c3.button("📝 결석신고서 작성", use_container_width=True): 
+            st.session_state.page = "결석신고서 작성"; st.rerun()
+        
+        c4, c5, c6 = st.columns(3)
+        if c4.button("📜 조퇴/외출/교내활동증 신청", use_container_width=True): 
+            st.session_state.page = "조퇴/외출/교내활동증 신청"; st.rerun()
+        if c5.button("🔐 비밀번호 변경", use_container_width=True): 
+            st.session_state.page = "비밀번호 변경"; st.rerun()
+        # c6는 디자인 정렬을 위해 비워둠 (필요 시 추가 가능)
+
+        # 👨‍🏫 교사용 (교사/관리자 전용)
+        if user['name'] in ["교사", "관리자"]:
+            st.markdown("---")
+            st.markdown("### 👨‍🏫 교사용")
+            tc1, tc2, tc3 = st.columns(3)
+            if tc1.button("🚩 출석체크", use_container_width=True): 
+                st.session_state.page = "[교사용]출석체크"; st.rerun()
+            if tc2.button("📁 결석계 다운로드", use_container_width=True): 
+                st.session_state.page = "[교사용]결석계 다운로드"; st.rerun()
+            if tc3.button("✅ 증명서 승인", use_container_width=True): 
+                st.session_state.page = "[교사용]증명서 승인"; st.rerun()
+
+    # 페이지 이동 로직
+    elif st.session_state.page == "[교사용]출석체크": 
+        attendance.show_page(conn)
+    elif st.session_state.page == "[교사용]결석계 다운로드": 
+        teacher_admin.show_page(conn, ADMIN_PASSWORD, FIXED_INFO, PATHS)
+    elif st.session_state.page == "[교사용]증명서 승인":
+        issuance_admin.show_page(conn)
+    elif st.session_state.page == "결석신고서 작성": 
+        absence.show_page(conn, user, FIXED_INFO, PATHS)
+    elif st.session_state.page == "시간표": 
+        timetable.show_page(conn)
+    elif st.session_state.page == "비밀번호 변경": 
+        settings.show_page(conn, user)
+    elif st.session_state.page == "자리배치": 
+        seat.show_page(conn, user)
+    elif st.session_state.page == "조퇴/외출/교내활동증 신청":
+        issuance_user.show_page(conn, user, FIXED_INFO)
+        # 기존 페이지 라우팅 로직 하단에 추가
+    elif st.session_state.page == "반장선거":
+        from modules import election
+        election.show_page(conn, user)
