@@ -8,3 +8,4 @@ requests
 google-api-python-client
 google-auth
 streamlit-pdf-viewer
+streamlit-autorefresh
