@@ -17,9 +17,10 @@ def load_class_info(_conn):
         df = _conn.read(worksheet="반정보")
         row = df.iloc[0] # 첫 번째 행 데이터 읽기
         return {
-            "dept": str(row.get("학과", "미상")),
-            "grade": str(row.get("학년", "0")),
-            "cls": str(row.get("반", "0")),
+            # 데이터 로드 시점부터 소수점 제거 방어 로직 추가
+            "dept": str(row.get("학과", "미상")).replace('.0', ''),
+            "grade": str(row.get("학년", "0")).replace('.0', ''),
+            "cls": str(row.get("반", "0")).replace('.0', ''),
             "student_count": int(row.get("학생수", 0))
         }
     except Exception as e:
@@ -155,15 +156,26 @@ class SchoolPDF(FPDF):
         if os.path.exists(self.bg_image_path):
             self.image(self.bg_image_path, x=0, y=0, w=210, h=297)
         self.set_text_color(0, 0, 0); self.set_font('Nanum', '', 13)
-        self.text(98, 55, fixed_info['dept']); self.text(140, 55, str(fixed_info['grade']))
-        self.text(161, 55, str(fixed_info['cls'])); self.text(177, 55, str(data['num']))
+        
+        # 📌 [핵심 수정 부분] PDF에 글씨를 쓰기 직전에 소수점(.0)을 한 번 더 완벽하게 제거합니다.
+        dept_str = str(fixed_info.get('dept', '')).replace('.0', '')
+        grade_str = str(fixed_info.get('grade', '')).replace('.0', '')
+        cls_str = str(fixed_info.get('cls', '')).replace('.0', '')
+        num_str = str(data.get('num', '')).replace('.0', '')
+        
+        # 수정된 변수로 텍스트 출력
+        self.text(98, 55, dept_str)
+        self.text(140, 55, grade_str)
+        self.text(161, 55, cls_str)
+        self.text(177, 55, num_str)
+        
         self.set_font('Nanum', '', 15); self.text(150, 65, data['name'])
         
         self.set_font('Nanum', '', 12)
         self.text(146, 77, str(data['s_m'])); self.text(163, 77, str(data['s_d']))
         self.text(28, 85, str(data['e_m'])); self.text(46, 85, str(data['e_d'])); self.text(74, 85, str(data['days']))
         
-        # [추가] 결석 동그라미
+        # 결석 동그라미
         self.set_draw_color(0, 0, 0); self.set_line_width(0.5)
         self.ellipse(95, 80, 11, 7, style='D')
 
